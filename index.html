@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UM Smart Sustainability Dashboard</title>
+    <title>C.O.O.L - UM</title>
     <meta
       name="description"
       content="Smart Sustainability Dashboard for Universiti Malaya (demo). Real-time campus sensors, sustainability goals, and Green Points rewards."
@@ -24,11 +24,15 @@
     <div class="app">
       <header class="topbar">
         <div class="brand">
-          <div class="brand__mark" aria-hidden="true"></div>
+          <img
+            src="um-logo.png"
+            alt="Universiti Malaya logo"
+            class="brand__logo"
+          />
           <div class="brand__text">
-            <div class="brand__title">UM Smart Sustainability Dashboard</div>
+            <div class="brand__title">C.O.O.L - UM</div>
             <div class="brand__subtitle">
-              Demo: real-time campus monitoring + data-driven decisions
+              Campus Optimisation for Outdoor Liveability in Universiti Malaya
             </div>
           </div>
         </div>
@@ -38,6 +42,7 @@
             <div class="kpi__label">Green Points</div>
             <div class="kpi__value" id="gpTotal">0</div>
           </div>
+          <a class="btn btn--ghost" href="./stats.html">Statistics</a>
           <button class="btn btn--ghost" id="btnOpenRewards" type="button">
             Rewards
           </button>
@@ -103,6 +108,26 @@
               </div>
             </div>
 
+            <div class="filterBar" id="filterBar" aria-label="Filter by campus area">
+              <div class="filterBar__group">
+                <label for="filterCategory">Area type</label>
+                <select id="filterCategory">
+                  <option value="all">All campus</option>
+                  <option value="residential">Residential colleges (KK / RC)</option>
+                  <option value="faculties">Faculties & academies</option>
+                  <option value="admin">Administration & student hubs</option>
+                  <option value="facilities">Facilities & green</option>
+                  <option value="external">Off-campus / external</option>
+                </select>
+              </div>
+              <div class="filterBar__group">
+                <label for="filterPlace">Specific location</label>
+                <select id="filterPlace">
+                  <option value="all">All in selected area</option>
+                </select>
+              </div>
+            </div>
+
             <div class="cards" id="cards"></div>
 
             <div class="tableWrap">
@@ -114,6 +139,8 @@
                 </table>
               </div>
             </div>
+
+            <div class="transportStats" id="transportStats"></div>
           </section>
         </section>
       </main>

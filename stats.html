@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>C.O.O.L - UM · 10-Year Statistics</title>
+    <meta
+      name="description"
+      content="Long-term sustainability statistics for C.O.O.L - UM, summarising sensor data for six goals over time."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <img
+            src="https://www.um.edu.my/images/um-logo.png"
+            alt="Universiti Malaya logo"
+            class="brand__logo"
+          />
+          <div class="brand__text">
+            <div class="brand__title">C.O.O.L - UM</div>
+            <div class="brand__subtitle">
+              Campus Optimisation for Outdoor Liveability in Universiti Malaya · 10-Year Statistics
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar__right">
+          <a class="btn btn--ghost" href="./index.html">Back to live dashboard</a>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel" style="grid-column: 1 / -1;">
+          <nav class="goalNav" aria-label="Sustainability goals (statistics)">
+            <button class="goalBtn is-active" data-stat-goal="temp" type="button">
+              <div class="goalBtn__title">1) Campus Temperature</div>
+              <div class="goalBtn__desc">10-year trend of average temp & hotspots</div>
+            </button>
+            <button class="goalBtn" data-stat-goal="energy" type="button">
+              <div class="goalBtn__title">2) Energy Usage</div>
+              <div class="goalBtn__desc">Demand and consumption by year</div>
+            </button>
+            <button class="goalBtn" data-stat-goal="green" type="button">
+              <div class="goalBtn__title">3) Green Space & Biodiversity</div>
+              <div class="goalBtn__desc">Canopy and biodiversity indicators</div>
+            </button>
+            <button class="goalBtn" data-stat-goal="transport" type="button">
+              <div class="goalBtn__title">4) Transportation Efficiency</div>
+              <div class="goalBtn__desc">Ridership, headway and punctuality</div>
+            </button>
+            <button class="goalBtn" data-stat-goal="water" type="button">
+              <div class="goalBtn__title">5) Water & Recycling</div>
+              <div class="goalBtn__desc">Usage, leaks and diversion</div>
+            </button>
+            <button class="goalBtn" data-stat-goal="air" type="button">
+              <div class="goalBtn__title">6) Air Quality</div>
+              <div class="goalBtn__desc">AQI distribution and alerts</div>
+            </button>
+          </nav>
+
+          <section class="goalContent" aria-live="polite">
+            <div class="goalHeader">
+              <div class="goalHeader__left">
+                <div class="goalHeader__title" id="statGoalTitle">
+                  Campus Temperature – Long-Term Overview
+                </div>
+                <div class="goalHeader__subtitle" id="statGoalSubtitle">
+                  Aggregated snapshots saved from the live sensors. Designed to support analysis up to 10 years.
+                </div>
+              </div>
+              <div class="goalHeader__right">
+                <button class="btn" id="btnExportCsv" type="button">Export 10-year report (CSV)</button>
+              </div>
+            </div>
+
+            <div class="cards" id="statCards"></div>
+
+            <div class="tableWrap">
+              <div class="tableTitle" id="statTableTitle">Yearly Summary</div>
+              <div class="tableScroll">
+                <table class="table" id="statTable">
+                  <thead id="statTableHead"></thead>
+                  <tbody id="statTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="transportStats" id="statAdjustments">
+              <div class="transportStats__head">
+                <div>
+                  <div class="transportStats__title">Adjustment log</div>
+                  <div class="transportStats__meta">
+                    Record every policy / configuration change so future statistics can be interpreted correctly.
+                  </div>
+                </div>
+              </div>
+              <div class="transportStats__body">
+                <div class="transportStats__grid">
+                  <div class="transportStats__panel">
+                    <div class="transportStats__panelTitle">Add adjustment</div>
+                    <form class="transportStats__form" id="statAdjustmentForm" data-goal="temp">
+                      <label for="statAdjustmentText">
+                        Describe the adjustment (e.g. “Tightened temperature setpoint in KK1 to 26°C”, “Added 1 bus to line C at peak hour”).
+                      </label>
+                      <textarea
+                        id="statAdjustmentText"
+                        name="description"
+                        placeholder="Describe the change you are making for this goal…"
+                      ></textarea>
+                      <div class="transportStats__formActions">
+                        <button class="btn" type="submit">Save adjustment</button>
+                      </div>
+                    </form>
+                  </div>
+                  <div class="transportStats__panel">
+                    <div class="transportStats__panelTitle">History</div>
+                    <div class="transportStats__list" id="statAdjustmentList"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="footer__note">
+          Statistics are based on snapshots recorded from the live demo in this browser. For production, connect to UM
+          data warehouse / APIs and retain 10-year history centrally.
+        </div>
+      </footer>
+    </div>
+
+    <script src="./data.js"></script>
+    <script src="./stats.js"></script>
+  </body>
+</html>
+

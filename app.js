@@ -14,6 +14,8 @@
 
   const STORAGE_KEY = "um_demo_green_points_v1";
   const HISTORY_KEY = "um_demo_green_points_history_v1";
+  const ADJUST_KEY = "um_demo_adjustments_v1";
+  const GOAL_HISTORY_KEY = "um_demo_goal_history_v1";
 
   const state = {
     goal: "temp",
@@ -33,7 +35,15 @@
     waterByBuilding: new Map(), // id -> { lpmNow, m3Today, leakRisk }
     recycling: { diversionPct: 0, contaminationPct: 0, binsFull: 0 },
     buses: new Map(), // line -> { activeBuses, headwayMin, ridershipNow, onTimePct }
+    busHistory: new Map(), // line -> [{ ts, headwayMin, ridershipNow, onTimePct, activeBuses }]
+    adjustments: loadAdjustments(), // goalId -> [{ ts, description }]
+    goalHistory: loadGoalHistory(), // goalId -> [{ ts, ...metrics }]
+    selectedBusLine: "AB",
     biodiversity: new Map(), // zone -> { canopyPct, nativeSpeciesIndex, pollinatorScore }
+    filters: {
+      category: "all",
+      placeId: "all",
+    },
   };
 
   // ---------- Persistence ----------
@@ -62,6 +72,77 @@
     localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history.slice(0, 60)));
   }
 
+  function loadAdjustments() {
+    const raw = localStorage.getItem(ADJUST_KEY);
+    if (!raw) return new Map();
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return new Map();
+      const m = new Map();
+      Object.entries(parsed).forEach(([goalId, list]) => {
+        if (Array.isArray(list)) {
+          m.set(
+            goalId,
+            list
+              .filter((x) => x && typeof x.description === "string" && typeof x.ts === "number")
+              .slice(0, 80)
+          );
+        }
+      });
+      return m;
+    } catch {
+      return new Map();
+    }
+  }
+
+  function saveAdjustments() {
+    const obj = {};
+    state.adjustments.forEach((list, goalId) => {
+      obj[goalId] = list.slice(0, 80);
+    });
+    localStorage.setItem(ADJUST_KEY, JSON.stringify(obj));
+  }
+
+  function addAdjustment(goalId, description) {
+    const trimmed = String(description || "").trim();
+    if (!trimmed) return;
+    const list = state.adjustments.get(goalId) || [];
+    list.unshift({ ts: Date.now(), description: trimmed });
+    state.adjustments.set(goalId, list.slice(0, 80));
+    saveAdjustments();
+  }
+
+  function loadGoalHistory() {
+    const raw = localStorage.getItem(GOAL_HISTORY_KEY);
+    if (!raw) return new Map();
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return new Map();
+      const m = new Map();
+      Object.entries(parsed).forEach(([goalId, list]) => {
+        if (Array.isArray(list)) {
+          m.set(
+            goalId,
+            list
+              .filter((x) => x && typeof x.ts === "number")
+              .slice(0, 5000)
+          );
+        }
+      });
+      return m;
+    } catch {
+      return new Map();
+    }
+  }
+
+  function saveGoalHistory() {
+    const obj = {};
+    state.goalHistory.forEach((list, goalId) => {
+      obj[goalId] = list.slice(0, 5000);
+    });
+    localStorage.setItem(GOAL_HISTORY_KEY, JSON.stringify(obj));
+  }
+
   function addGP(delta, title) {
     state.gp += delta;
     saveGP();
@@ -76,6 +157,8 @@
   const umCenter = [UM_DEMO.UM_CENTER.lat, UM_DEMO.UM_CENTER.lng];
   map.setView(umCenter, 16);
 
+  const campusById = new Map(UM_DEMO.campusPlaces.map((p) => [p.id, p]));
+
   // OSM tiles (works without API key). You can swap to Google Maps via embed/API if you have a key.
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -84,6 +167,50 @@
   }).addTo(map);
 
   const markers = new Map(); // placeId -> marker
+  const busRouteLayers = []; // Leaflet polylines for bus routes
+
+  const PLACE_CATEGORY_CONFIG = [
+    {
+      id: "all",
+      label: "All campus",
+      matcher: () => true,
+    },
+    {
+      id: "residential",
+      label: "Residential colleges (KK / RC)",
+      matcher: (p) =>
+        p.zone === "Residential" ||
+        /Residential College|Kolej Kediaman|RC/i.test(p.name || ""),
+    },
+    {
+      id: "faculties",
+      label: "Faculties & academies",
+      matcher: (p) =>
+        p.zone === "Academic" ||
+        /(Faculty|Academy|Centre for Foundation)/i.test(p.name || ""),
+    },
+    {
+      id: "admin",
+      label: "Administration & student hubs",
+      matcher: (p) =>
+        /(Dewan Tunku Canselor|UM Central|Chancellery|Registrar|Bursar)/i.test(
+          p.name || ""
+        ) || p.zone === "Admin" || p.zone === "Student",
+    },
+    {
+      id: "facilities",
+      label: "Facilities & green",
+      matcher: (p) =>
+        /(Sports Centre|Tasik Varsiti|Stadium|Swimming Pool|Mosque|Health Centre|Library)/i.test(
+          p.name || ""
+        ) || p.zone === "Sports" || p.zone === "Green",
+    },
+    {
+      id: "external",
+      label: "Off-campus / external",
+      matcher: (p) => p.zone === "External",
+    },
+  ];
 
   function markerColorForTemp(tempC) {
     if (tempC >= 33) return "#ff5d7a";
@@ -120,6 +247,28 @@
       const m = L.marker([p.lat, p.lng], { icon: makeDotIcon("#46d6ff") }).addTo(map);
       m.bindPopup("Loading…");
       markers.set(p.id, m);
+    });
+  }
+
+  function clearBusRoutes() {
+    busRouteLayers.forEach((l) => map.removeLayer(l));
+    busRouteLayers.length = 0;
+  }
+
+  function drawBusRoutes() {
+    clearBusRoutes();
+    (UM_DEMO.busRoutes || []).forEach((route) => {
+      const latlngs = route.stops
+        .map((id) => campusById.get(id))
+        .filter(Boolean)
+        .map((p) => [p.lat, p.lng]);
+      if (latlngs.length < 2) return;
+      const line = L.polyline(latlngs, {
+        color: route.color || "#46d6ff",
+        weight: 4,
+        opacity: 0.85,
+      }).addTo(map);
+      busRouteLayers.push(line);
     });
   }
 
@@ -368,7 +517,7 @@
       binsFull: clamp(state.recycling.binsFull + Math.round(rand(-1, 1)), 0, 12),
     };
 
-    // Transport (dummy bus KPIs)
+    // Transport (dummy bus KPIs + history)
     UM_DEMO.busLines.forEach((line) => {
       const b = state.buses.get(line.id);
       if (!b) return;
@@ -376,7 +525,12 @@
       const active = clamp(Math.round(jitterToward(b.activeBuses, rand(1, 5), 1)), 1, 6);
       const ridership = clamp(Math.round(jitterToward(b.ridershipNow, rand(25, 260), 30)), 10, 380);
       const onTime = clamp(jitterToward(b.onTimePct, rand(70, 98), 2.2), 55, 99);
-      state.buses.set(line.id, { activeBuses: active, headwayMin: headway, ridershipNow: ridership, onTimePct: onTime });
+      const metrics = { activeBuses: active, headwayMin: headway, ridershipNow: ridership, onTimePct: onTime };
+      state.buses.set(line.id, metrics);
+
+      const arr = state.busHistory.get(line.id) || [];
+      arr.unshift({ ts: Date.now(), ...metrics });
+      state.busHistory.set(line.id, arr.slice(0, 240));
     });
 
     // Biodiversity (slow drift)
@@ -389,6 +543,108 @@
         pollinatorScore: clamp(bio.pollinatorScore + rand(-0.006, 0.008), 0.1, 0.95),
       });
     });
+
+    if (state.tick % 600 === 0) {
+      recordGoalSnapshot();
+    }
+  }
+
+  function recordGoalSnapshot() {
+    const now = Date.now();
+
+    // Temperature
+    const tempPlaces = Array.from(state.sensors.tempByPlace.values());
+    if (tempPlaces.length) {
+      const avgTemp = tempPlaces.reduce((s, t) => s + t.tempC, 0) / tempPlaces.length;
+      const hot = tempPlaces.filter((t) => t.tempC >= 31.5).length;
+      const cooling = tempPlaces.filter((t) => t.iotCoolingOn).length;
+      appendGoalHistory("temp", {
+        ts: now,
+        avgTemp,
+        hotspots: hot,
+        coolingOn: cooling,
+        totalSensors: tempPlaces.length,
+      });
+    }
+
+    // Energy
+    const energyRows = Array.from(state.energyByBuilding.values());
+    if (energyRows.length) {
+      const totalKw = energyRows.reduce((s, e) => s + e.kwNow, 0);
+      const totalKwh = energyRows.reduce((s, e) => s + e.kwhToday, 0);
+      appendGoalHistory("energy", {
+        ts: now,
+        totalKw,
+        totalKwh,
+      });
+    }
+
+    // Green
+    const zones = Array.from(state.biodiversity.values());
+    if (zones.length) {
+      const avgCanopy = zones.reduce((s, z) => s + z.canopyPct, 0) / zones.length;
+      const avgNative = zones.reduce((s, z) => s + z.nativeSpeciesIndex, 0) / zones.length;
+      const avgPoll = zones.reduce((s, z) => s + z.pollinatorScore, 0) / zones.length;
+      appendGoalHistory("green", {
+        ts: now,
+        avgCanopy,
+        avgNative,
+        avgPoll,
+      });
+    }
+
+    // Transport
+    const busLinesData = Array.from(state.buses.values());
+    if (busLinesData.length) {
+      const ridership = busLinesData.reduce((s, b) => s + b.ridershipNow, 0);
+      const onTime =
+        busLinesData.reduce((s, b) => s + b.onTimePct, 0) / Math.max(1, busLinesData.length);
+      const headway =
+        busLinesData.reduce((s, b) => s + b.headwayMin, 0) / Math.max(1, busLinesData.length);
+      appendGoalHistory("transport", {
+        ts: now,
+        ridership,
+        avgOnTime: onTime,
+        avgHeadway: headway,
+      });
+    }
+
+    // Water
+    const waterRows = Array.from(state.waterByBuilding.values());
+    if (waterRows.length) {
+      const totalLpm = waterRows.reduce((s, w) => s + w.lpmNow, 0);
+      const totalM3 = waterRows.reduce((s, w) => s + w.m3Today, 0);
+      appendGoalHistory("water", {
+        ts: now,
+        totalLpm,
+        totalM3,
+        diversionPct: state.recycling.diversionPct,
+        binsFull: state.recycling.binsFull,
+      });
+    }
+
+    // Air
+    const airPlaces = Array.from(state.sensors.airByPlace.values());
+    if (airPlaces.length) {
+      const avgAqi = airPlaces.reduce((s, a) => s + a.aqi, 0) / airPlaces.length;
+      const worstAqi = airPlaces.reduce((m, a) => (a.aqi > m ? a.aqi : m), 0);
+      const alerts = airPlaces.filter((a) => a.aqi >= 120).length;
+      appendGoalHistory("air", {
+        ts: now,
+        avgAqi,
+        worstAqi,
+        alerts,
+      });
+    }
+
+    saveGoalHistory();
+  }
+
+  function appendGoalHistory(goalId, entry) {
+    const list = state.goalHistory.get(goalId) || [];
+    list.push(entry);
+    if (list.length > 5000) list.shift();
+    state.goalHistory.set(goalId, list);
   }
 
   // ---------- Rendering ----------
@@ -459,7 +715,10 @@
       "Sensor Readings"
     );
 
-    const places = UM_DEMO.campusPlaces.map((p) => ({ p, t: state.sensors.tempByPlace.get(p.id) })).filter((x) => x.t);
+    const places = filteredCampusPlaces().map((p) => ({
+      p,
+      t: state.sensors.tempByPlace.get(p.id),
+    })).filter((x) => x.t);
     const avg = places.reduce((s, x) => s + x.t.tempC, 0) / Math.max(1, places.length);
     const hotSpots = places.filter((x) => x.t.tempC >= 31.5).length;
     const coolingOn = places.filter((x) => x.t.iotCoolingOn).length;
@@ -504,7 +763,7 @@
       "Building Energy Overview"
     );
 
-    const rows = UM_DEMO.buildings.map((b) => {
+    const rows = filteredBuildings().map((b) => {
       const e = state.energyByBuilding.get(b.id);
       const delta = ((e.kwhToday - e.baselineKwhToday) / e.baselineKwhToday) * 100;
       return { b, e, delta };
@@ -589,6 +848,8 @@
     const onTime = lines.reduce((s, x) => s + x.k.onTimePct, 0) / Math.max(1, lines.length);
     const avgHeadway = lines.reduce((s, x) => s + x.k.headwayMin, 0) / Math.max(1, lines.length);
 
+    const service = currentBusServiceStatus();
+
     $("#cards").innerHTML = [
       card("Ridership now", `${fmt.n(ridership, 0)}`, "Estimated passengers across all lines"),
       card("Avg headway", `${fmt.n(avgHeadway, 0)} min`, "Lower means better frequency"),
@@ -615,6 +876,41 @@
     );
   }
 
+  function currentBusServiceStatus() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const minutes = now.getHours() * 60 + now.getMinutes();
+
+    const withinOperatingWindow = minutes >= 7 * 60 + 30 && minutes <= 22 * 60;
+    const isWeekend = day === 0 || day === 6;
+    const isFriday = day === 5;
+    const isFridayPrayer =
+      isFriday && minutes >= 13 * 60 + 30 && minutes < 14 * 60 + 30; // 13:30–14:30
+
+    if (isWeekend) {
+      return {
+        active: false,
+        label: "Bus lines do not operate on weekends, public holidays, semester breaks or study week.",
+      };
+    }
+    if (!withinOperatingWindow) {
+      return {
+        active: false,
+        label: "Service hours are 7:30 AM – 10:00 PM (Mon–Fri).",
+      };
+    }
+    if (isFridayPrayer) {
+      return {
+        active: false,
+        label: "Service temporarily paused for Friday prayer (13:30–14:30).",
+      };
+    }
+    return {
+      active: true,
+      label: "Service operating now (rules: Mon–Fri 7:30–22:00, closed on public holidays, mid-sem break and study week).",
+    };
+  }
+
   function renderWater() {
     setGoalHeader(
       "Water Management & Recycling (Dummy Data)",
@@ -622,7 +918,9 @@
       "Water & Recycling Overview"
     );
 
-    const rows = UM_DEMO.buildings.map((b) => ({ b, w: state.waterByBuilding.get(b.id) })).filter((x) => x.w);
+    const rows = filteredBuildings()
+      .map((b) => ({ b, w: state.waterByBuilding.get(b.id) }))
+      .filter((x) => x.w);
     const totalLpm = rows.reduce((s, x) => s + x.w.lpmNow, 0);
     const m3 = rows.reduce((s, x) => s + x.w.m3Today, 0);
     const highLeak = rows.filter((x) => x.w.leakRisk >= 0.42).length;
@@ -663,7 +961,9 @@
       "Air Quality Sensors"
     );
 
-    const rows = UM_DEMO.campusPlaces.map((p) => ({ p, a: state.sensors.airByPlace.get(p.id) })).filter((x) => x.a);
+    const rows = filteredCampusPlaces()
+      .map((p) => ({ p, a: state.sensors.airByPlace.get(p.id) }))
+      .filter((x) => x.a);
     const avgAqi = rows.reduce((s, x) => s + x.a.aqi, 0) / Math.max(1, rows.length);
     const worst = rows.reduce((m, x) => (x.a.aqi > m ? x.a.aqi : m), 0);
     const alerts = rows.filter((x) => x.a.aqi >= 120).length;
@@ -706,13 +1006,63 @@
 
   function renderGoal() {
     renderLegend();
-    if (state.goal === "temp") renderTemp();
-    else if (state.goal === "energy") renderEnergy();
-    else if (state.goal === "green") renderGreen();
-    else if (state.goal === "transport") renderTransport();
-    else if (state.goal === "water") renderWater();
-    else if (state.goal === "air") renderAir();
+    updateFilterBarForGoal();
+    const statsEl = $("#transportStats");
+    if (state.goal === "temp") {
+      clearBusRoutes();
+      if (statsEl) statsEl.innerHTML = "";
+      renderTemp();
+    } else if (state.goal === "energy") {
+      clearBusRoutes();
+      if (statsEl) statsEl.innerHTML = "";
+      renderEnergy();
+    } else if (state.goal === "green") {
+      clearBusRoutes();
+      if (statsEl) statsEl.innerHTML = "";
+      renderGreen();
+    } else if (state.goal === "transport") {
+      drawBusRoutes();
+      renderTransport();
+    } else if (state.goal === "water") {
+      clearBusRoutes();
+      if (statsEl) statsEl.innerHTML = "";
+      renderWater();
+    } else if (state.goal === "air") {
+      clearBusRoutes();
+      if (statsEl) statsEl.innerHTML = "";
+      renderAir();
+    }
     updateMarkerPopups();
+  }
+
+  function filteredCampusPlaces() {
+    const { category, placeId } = state.filters;
+    const catConfig =
+      PLACE_CATEGORY_CONFIG.find((c) => c.id === category) ||
+      PLACE_CATEGORY_CONFIG[0];
+    let list = UM_DEMO.campusPlaces.filter(catConfig.matcher);
+    if (placeId && placeId !== "all" && campusById.has(placeId)) {
+      list = list.filter((p) => p.id === placeId);
+    }
+    return list;
+  }
+
+  function filteredBuildings() {
+    const { category, placeId } = state.filters;
+    if (placeId && placeId !== "all") {
+      const match = UM_DEMO.buildings.find((b) => b.id === placeId);
+      if (match) return [match];
+    }
+    if (category === "all") return UM_DEMO.buildings;
+    return UM_DEMO.buildings.filter((b) => {
+      if (category === "residential") return b.type === "Residential";
+      if (category === "faculties") return b.type === "Academic";
+      if (category === "facilities")
+        return b.type === "Sports" || b.type === "Student";
+      if (category === "admin") return /Admin/i.test(b.type || "");
+      if (category === "external") return false;
+      return true;
+    });
   }
 
   // ---------- Events ----------
@@ -752,6 +1102,84 @@
       saveHistory();
       renderGP();
     });
+
+    // Area / building filters
+    const catSelect = $("#filterCategory");
+    const placeSelect = $("#filterPlace");
+    if (catSelect && placeSelect) {
+      catSelect.addEventListener("change", () => {
+        state.filters.category = catSelect.value || "all";
+        state.filters.placeId = "all";
+        populatePlaceOptions();
+        renderGoal();
+      });
+      placeSelect.addEventListener("change", () => {
+        state.filters.placeId = placeSelect.value || "all";
+        renderGoal();
+      });
+      populatePlaceOptions();
+    }
+
+    // Bus statistics: line selection + adjustment form (event delegation)
+    document.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-bus-line-btn]");
+      if (!btn) return;
+      const id = btn.dataset.line;
+      if (!id) return;
+      state.selectedBusLine = id;
+      renderGoal();
+    });
+
+    document.addEventListener("submit", (ev) => {
+      const form = ev.target.closest("#busAdjustmentForm");
+      if (!form) return;
+      ev.preventDefault();
+      const goalId = form.dataset.goal || "transport";
+      const textarea = form.querySelector("textarea[name='description']");
+      const desc = textarea ? textarea.value : "";
+      addAdjustment(goalId, desc);
+      if (textarea) textarea.value = "";
+      renderGoal();
+    });
+  }
+
+  function populatePlaceOptions() {
+    const placeSelect = $("#filterPlace");
+    const catSelect = $("#filterCategory");
+    if (!placeSelect || !catSelect) return;
+    const category = catSelect.value || "all";
+
+    const dir = UM_DEMO.buildingDirectory || [];
+    let dirItems = dir;
+    if (category === "residential")
+      dirItems = dir.filter((d) => d.group === "Residential Colleges");
+    else if (category === "faculties")
+      dirItems = dir.filter((d) => d.group === "Faculties");
+    else if (category === "admin")
+      dirItems = dir.filter((d) => d.group === "Administration");
+    else if (category === "facilities")
+      dirItems = dir.filter((d) => d.group === "Facilities");
+
+    const options = [
+      `<option value="all">All in selected area</option>`,
+      ...dirItems.map(
+        (d) =>
+          `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`
+      ),
+    ];
+    placeSelect.innerHTML = options.join("");
+  }
+
+  function updateFilterBarForGoal() {
+    const filterBar = $("#filterBar");
+    if (!filterBar) return;
+    // Building-related goals: temp, energy, water, air
+    const show =
+      state.goal === "temp" ||
+      state.goal === "energy" ||
+      state.goal === "water" ||
+      state.goal === "air";
+    filterBar.style.display = show ? "flex" : "none";
   }
 
   // ---------- Helpers ----------
