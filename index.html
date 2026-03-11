@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UM Smart Sustainability Dashboard</title>
+    <meta
+      name="description"
+      content="Smart Sustainability Dashboard for Universiti Malaya (demo). Real-time campus sensors, sustainability goals, and Green Points rewards."
+    />
+
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true"></div>
+          <div class="brand__text">
+            <div class="brand__title">UM Smart Sustainability Dashboard</div>
+            <div class="brand__subtitle">
+              Demo: real-time campus monitoring + data-driven decisions
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar__right">
+          <div class="kpi">
+            <div class="kpi__label">Green Points</div>
+            <div class="kpi__value" id="gpTotal">0</div>
+          </div>
+          <button class="btn btn--ghost" id="btnOpenRewards" type="button">
+            Rewards
+          </button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="mapPane">
+          <div class="mapHeader">
+            <div class="mapHeader__title">Universiti Malaya Campus Map</div>
+            <div class="mapHeader__meta">
+              <span class="pill" id="pillRealtime">Realtime: ON</span>
+              <span class="pill pill--muted" id="pillUpdated">Updated: --</span>
+            </div>
+          </div>
+          <div id="map" class="map" role="application" aria-label="Campus map"></div>
+          <div class="mapLegend" id="mapLegend" aria-label="Legend"></div>
+        </section>
+
+        <section class="panel">
+          <nav class="goalNav" aria-label="Sustainability goals">
+            <button class="goalBtn is-active" data-goal="temp" type="button">
+              <div class="goalBtn__title">1) Campus Temperature</div>
+              <div class="goalBtn__desc">Urban heat + IoT cooling control</div>
+            </button>
+            <button class="goalBtn" data-goal="energy" type="button">
+              <div class="goalBtn__title">2) Energy Usage</div>
+              <div class="goalBtn__desc">Building-level tracking (dummy)</div>
+            </button>
+            <button class="goalBtn" data-goal="green" type="button">
+              <div class="goalBtn__title">3) Green Space & Biodiversity</div>
+              <div class="goalBtn__desc">Habitat & species indicators</div>
+            </button>
+            <button class="goalBtn" data-goal="transport" type="button">
+              <div class="goalBtn__title">4) Transportation Efficiency</div>
+              <div class="goalBtn__desc">UM bus lines AB, BA, C, D, E, 13</div>
+            </button>
+            <button class="goalBtn" data-goal="water" type="button">
+              <div class="goalBtn__title">5) Water & Recycling</div>
+              <div class="goalBtn__desc">Usage + diversion (dummy)</div>
+            </button>
+            <button class="goalBtn" data-goal="air" type="button">
+              <div class="goalBtn__title">6) Air Quality</div>
+              <div class="goalBtn__desc">AQI sensors + alerts</div>
+            </button>
+          </nav>
+
+          <section class="goalContent" aria-live="polite">
+            <div class="goalHeader">
+              <div class="goalHeader__left">
+                <div class="goalHeader__title" id="goalTitle">
+                  Campus Temperature (Urban Heat Monitoring)
+                </div>
+                <div class="goalHeader__subtitle" id="goalSubtitle">
+                  Live sensors by location, with IoT controller status to maintain target comfort.
+                </div>
+              </div>
+              <div class="goalHeader__right">
+                <button class="btn" id="btnCenterUM" type="button">Center UM</button>
+                <button class="btn btn--ghost" id="btnPause" type="button">
+                  Pause realtime
+                </button>
+              </div>
+            </div>
+
+            <div class="cards" id="cards"></div>
+
+            <div class="tableWrap">
+              <div class="tableTitle" id="tableTitle">Sensor Readings</div>
+              <div class="tableScroll">
+                <table class="table" id="table">
+                  <thead id="tableHead"></thead>
+                  <tbody id="tableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <dialog class="dialog" id="rewardsDialog" aria-label="Green Points Rewards">
+        <form method="dialog" class="dialog__inner">
+          <div class="dialog__header">
+            <div>
+              <div class="dialog__title">Green Points Reward System</div>
+              <div class="dialog__subtitle">
+                Earn points for sustainable actions (demo). Your points persist in this browser.
+              </div>
+            </div>
+            <button class="btn btn--ghost" value="close" type="submit">Close</button>
+          </div>
+
+          <div class="dialog__content">
+            <div class="rewardGrid">
+              <div class="rewardCard">
+                <div class="rewardCard__title">Recycle correctly</div>
+                <div class="rewardCard__desc">Scan at recycling bin / report activity</div>
+                <div class="rewardCard__row">
+                  <span class="pill">+10 GP</span>
+                  <button class="btn" data-reward="recycle" type="button">Claim</button>
+                </div>
+              </div>
+              <div class="rewardCard">
+                <div class="rewardCard__title">Use green transport</div>
+                <div class="rewardCard__desc">Walk, cycle, UM bus, or carpool</div>
+                <div class="rewardCard__row">
+                  <span class="pill">+8 GP</span>
+                  <button class="btn" data-reward="transport" type="button">Claim</button>
+                </div>
+              </div>
+              <div class="rewardCard">
+                <div class="rewardCard__title">Join sustainability program</div>
+                <div class="rewardCard__desc">Workshop, cleanup, or eco-volunteering</div>
+                <div class="rewardCard__row">
+                  <span class="pill">+15 GP</span>
+                  <button class="btn" data-reward="event" type="button">Claim</button>
+                </div>
+              </div>
+              <div class="rewardCard">
+                <div class="rewardCard__title">Report campus issue</div>
+                <div class="rewardCard__desc">Leak, overheating spot, waste overflow</div>
+                <div class="rewardCard__row">
+                  <span class="pill">+5 GP</span>
+                  <button class="btn" data-reward="report" type="button">Claim</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="rewardHistory">
+              <div class="rewardHistory__head">
+                <div class="rewardHistory__title">Recent activity</div>
+                <button class="btn btn--ghost" id="btnResetGP" type="button">
+                  Reset points
+                </button>
+              </div>
+              <div class="rewardHistory__list" id="gpHistory"></div>
+            </div>
+          </div>
+        </form>
+      </dialog>
+
+      <footer class="footer">
+        <div class="footer__note">
+          Demo data only. Replace the simulated feeds with UM IoT / building management / transit APIs when available.
+        </div>
+      </footer>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
