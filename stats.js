@@ -17,6 +17,8 @@
     goalHistory: loadGoalHistory(),
   };
 
+  let currentCharts = [];
+
   // Seed with example 10-year data if nothing exists yet.
   if (state.goalHistory.size === 0) {
     seedExampleHistory();
@@ -261,6 +263,7 @@
     ].join("");
 
     renderTable(goalId, yearly);
+    renderChart(goalId, yearly);
     renderAdjustments(goalId);
   }
 
@@ -495,7 +498,159 @@
     }
   }
 
+  function renderChart(goalId, yearly) {
+    const grid = document.getElementById("chartGrid");
+    if (!grid) return;
+
+    // 1. Destroy all existing charts to prevent overlap/glitches
+    currentCharts.forEach(chart => chart.destroy());
+    currentCharts = [];
+    grid.innerHTML = ""; // Clear the grid
+
+    const labels = yearly.map((y) => y.year);
+
+    // Helper function to dynamically build chart cards
+    function createChart(type, title, datasets, yAxisStartsAtZero = false) {
+      // Create HTML structure for the chart card
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = "background: rgba(4,16,33,.60); border: 1px solid var(--line); border-radius: 16px; padding: 14px; height: 280px; display: flex; flex-direction: column;";
+      
+      const titleEl = document.createElement("div");
+      titleEl.style.cssText = "font-weight: 800; font-size: 13px; margin-bottom: 10px; color: var(--text);";
+      titleEl.textContent = title;
+
+      const canvasWrap = document.createElement("div");
+      canvasWrap.style.cssText = "flex: 1; min-height: 0; position: relative;";
+      
+      const canvas = document.createElement("canvas");
+      canvasWrap.appendChild(canvas);
+      wrapper.appendChild(titleEl);
+      wrapper.appendChild(canvasWrap);
+      grid.appendChild(wrapper);
+
+      // Render the Chart.js instance
+      const chart = new Chart(canvas, {
+        type: type,
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#f3f7ff", font: { family: 'ui-sans-serif, system-ui', size: 11 } } }
+          },
+          scales: {
+            x: { 
+              ticks: { color: "#8fa2ce" }, 
+              grid: { color: "rgba(195,210,240,0.08)" } 
+            },
+            y: { 
+              ticks: { color: "#8fa2ce" }, 
+              grid: { color: "rgba(195,210,240,0.08)" },
+              beginAtZero: yAxisStartsAtZero // False allows line charts to zoom in on small changes
+            }
+          }
+        }
+      });
+      currentCharts.push(chart);
+    }
+
+    // --- 2. Build specific charts based on the active goal ---
+    
+    // GOAL 1: TEMPERATURE
+    if (goalId === "temp") {
+      const temp = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgTemp||0), 0) / Math.max(1, y.entries.length));
+      const hotspots = yearly.map(y => y.entries.reduce((s, e) => s + (e.hotspots||0), 0) / Math.max(1, y.entries.length));
+      const cooling = yearly.map(y => y.entries.reduce((s, e) => s + (e.coolingOn||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('line', 'Average Campus Temperature (°C)', [
+        { label: "Avg Temp (°C)", data: temp, borderColor: "#ff5d7a", backgroundColor: "rgba(255, 93, 122, 0.2)", fill: true, tension: 0.3 }
+      ], false); // beginAtZero: false so the line isn't flat
+
+      createChart('bar', 'Hotspots vs IoT Cooling Activations', [
+        { label: "Hotspots Detected", data: hotspots, backgroundColor: "#ffb347" },
+        { label: "IoT Cooling ON", data: cooling, backgroundColor: "#46d6ff" }
+      ], true);
+    } 
+    
+    // GOAL 2: ENERGY
+    else if (goalId === "energy") {
+      const kw = yearly.map(y => y.entries.reduce((s, e) => s + (e.totalKw||0), 0) / Math.max(1, y.entries.length));
+      const kwh = yearly.map(y => y.entries.reduce((s, e) => s + (e.totalKwh||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('line', 'Average Demand (kW)', [
+        { label: "Demand (kW)", data: kw, borderColor: "#ffd100", backgroundColor: "rgba(255, 209, 0, 0.2)", fill: true, tension: 0.3 }
+      ], false);
+
+      createChart('bar', 'Average Daily Consumption (kWh)', [
+        { label: "Energy (kWh)", data: kwh, backgroundColor: "rgba(255, 209, 0, 0.8)" }
+      ], true);
+    } 
+    
+    // GOAL 3: GREEN
+    else if (goalId === "green") {
+      const canopy = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgCanopy||0), 0) / Math.max(1, y.entries.length));
+      const native = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgNative||0), 0) / Math.max(1, y.entries.length));
+      const poll = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgPoll||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('line', 'Canopy Coverage (%)', [
+        { label: "Canopy (%)", data: canopy, borderColor: "#45ff9a", backgroundColor: "rgba(69, 255, 154, 0.2)", fill: true, tension: 0.3 }
+      ], false);
+
+      createChart('line', 'Biodiversity Indicators (0 - 1.0)', [
+        { label: "Native Index", data: native, borderColor: "#46d6ff", backgroundColor: "transparent", tension: 0.3 },
+        { label: "Pollinator Score", data: poll, borderColor: "#ffb347", backgroundColor: "transparent", tension: 0.3 }
+      ], false);
+    } 
+    
+    // GOAL 4: TRANSPORT
+    else if (goalId === "transport") {
+      const ridership = yearly.map(y => y.entries.reduce((s, e) => s + (e.ridership||0), 0) / Math.max(1, y.entries.length));
+      const headway = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgHeadway||0), 0) / Math.max(1, y.entries.length));
+      const onTime = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgOnTime||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('bar', 'Daily Ridership', [
+        { label: "Total Ridership", data: ridership, backgroundColor: "#b59cff" }
+      ], true);
+
+      createChart('line', 'Efficiency: Headway vs On-Time', [
+        { label: "Avg Headway (mins)", data: headway, borderColor: "#ff5d7a", backgroundColor: "transparent", tension: 0.3 },
+        { label: "On-Time (%)", data: onTime, borderColor: "#45ff9a", backgroundColor: "transparent", tension: 0.3 }
+      ], false);
+    } 
+    
+    // GOAL 5: WATER
+    else if (goalId === "water") {
+      const flow = yearly.map(y => y.entries.reduce((s, e) => s + (e.totalLpm||0), 0) / Math.max(1, y.entries.length));
+      const volume = yearly.map(y => y.entries.reduce((s, e) => s + (e.totalM3||0), 0) / Math.max(1, y.entries.length));
+      const diversion = yearly.map(y => y.entries.reduce((s, e) => s + (e.diversionPct||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('bar', 'Water Flow & Volume', [
+        { label: "Flow (L/min)", data: flow, backgroundColor: "#46d6ff" },
+        { label: "Volume (m³)", data: volume, backgroundColor: "#064b8f" }
+      ], true);
+
+      createChart('line', 'Recycling Diversion Rate (%)', [
+        { label: "Diversion (%)", data: diversion, borderColor: "#45ff9a", backgroundColor: "rgba(69, 255, 154, 0.2)", fill: true, tension: 0.3 }
+      ], false);
+    } 
+    
+    // GOAL 6: AIR
+    else if (goalId === "air") {
+      const avgAqi = yearly.map(y => y.entries.reduce((s, e) => s + (e.avgAqi||0), 0) / Math.max(1, y.entries.length));
+      const worstAqi = yearly.map(y => y.entries.reduce((max, e) => Math.max(max, e.worstAqi||0), 0));
+      const alerts = yearly.map(y => y.entries.reduce((s, e) => s + (e.alerts||0), 0) / Math.max(1, y.entries.length));
+
+      createChart('line', 'Air Quality Index (AQI)', [
+        { label: "Average AQI", data: avgAqi, borderColor: "#46d6ff", backgroundColor: "transparent", tension: 0.3 },
+        { label: "Worst AQI", data: worstAqi, borderColor: "#ffb347", backgroundColor: "transparent", tension: 0.3 }
+      ], false);
+
+      createChart('bar', 'Air Quality Alerts per Year', [
+        { label: "Alerts", data: alerts, backgroundColor: "#ff5d7a" }
+      ], true);
+    }
+  }
+
   wireUI();
   render();
 })();
-
