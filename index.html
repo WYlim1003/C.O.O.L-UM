@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app">
+    <div class="app" id="mainApp">
       <header class="topbar">
         <div class="brand">
           <img
@@ -38,7 +38,7 @@
         </div>
 
         <div class="topbar__right">
-          <div class="kpi">
+          <div class="kpi" id="gpKpi">
             <div class="kpi__label">Green Points</div>
             <div class="kpi__value" id="gpTotal">0</div>
           </div>
@@ -158,52 +158,87 @@
           </div>
 
           <div class="dialog__content">
-            <div class="rewardGrid">
+            <div class="rewardCardsGrid">
               <div class="rewardCard">
-                <div class="rewardCard__title">Recycle correctly</div>
+                <div class="rewardCard__header">
+                  <div class="rewardCard__title">Recycle correctly</div>
+                  <div class="rewardCard__points">+10 GP</div>
+                </div>
                 <div class="rewardCard__desc">Scan at recycling bin / report activity</div>
-                <div class="rewardCard__row">
-                  <span class="pill">+10 GP</span>
-                  <button class="btn" data-reward="recycle" type="button">Claim</button>
-                </div>
+                <button class="btn btn--claim" data-reward="recycle" type="button">Claim</button>
               </div>
+              
               <div class="rewardCard">
-                <div class="rewardCard__title">Use green transport</div>
+                <div class="rewardCard__header">
+                  <div class="rewardCard__title">Use green transport</div>
+                  <div class="rewardCard__points">+8 GP</div>
+                </div>
                 <div class="rewardCard__desc">Walk, cycle, UM bus, or carpool</div>
-                <div class="rewardCard__row">
-                  <span class="pill">+8 GP</span>
-                  <button class="btn" data-reward="transport" type="button">Claim</button>
-                </div>
+                <button class="btn btn--claim" data-reward="transport" type="button">Claim</button>
               </div>
+              
               <div class="rewardCard">
-                <div class="rewardCard__title">Join sustainability program</div>
+                <div class="rewardCard__header">
+                  <div class="rewardCard__title">Join sustainability program</div>
+                  <div class="rewardCard__points">+15 GP</div>
+                </div>
                 <div class="rewardCard__desc">Workshop, cleanup, or eco-volunteering</div>
-                <div class="rewardCard__row">
-                  <span class="pill">+15 GP</span>
-                  <button class="btn" data-reward="event" type="button">Claim</button>
-                </div>
+                <button class="btn btn--claim" data-reward="event" type="button">Claim</button>
               </div>
+              
               <div class="rewardCard">
-                <div class="rewardCard__title">Report campus issue</div>
-                <div class="rewardCard__desc">Leak, overheating spot, waste overflow</div>
-                <div class="rewardCard__row">
-                  <span class="pill">+5 GP</span>
-                  <button class="btn" data-reward="report" type="button">Claim</button>
+                <div class="rewardCard__header">
+                  <div class="rewardCard__title">Report campus issue</div>
+                  <div class="rewardCard__points">+5 GP</div>
                 </div>
+                <div class="rewardCard__desc">Leak, overheating spot, waste overflow</div>
+                <button class="btn btn--claim" data-reward="report" type="button">Claim</button>
               </div>
             </div>
 
-            <div class="rewardHistory">
-              <div class="rewardHistory__head">
-                <div class="rewardHistory__title">Recent activity</div>
-                <button class="btn btn--ghost" id="btnResetGP" type="button">
-                  Reset points
-                </button>
+            <div class="recentActivity">
+              <div class="recentActivity__header">
+                <div class="recentActivity__title">Recent activity</div>
+                <button class="btn btn--ghost btn--sm" id="btnResetPoints" type="button">Reset points</button>
               </div>
-              <div class="rewardHistory__list" id="gpHistory"></div>
+              <div class="recentActivity__list" id="recentActivityList">
+                <div class="recentActivity__empty">No activity yet. Claim your first reward above!</div>
+              </div>
             </div>
           </div>
         </form>
+      </dialog>
+
+      <dialog class="dialog submissionModal" id="submissionDialog" aria-label="Submit Proof">
+        <div class="dialog__inner">
+          <div class="dialog__header">
+            <div>
+              <div class="dialog__title" id="submissionTitle">Submit Proof</div>
+              <div class="dialog__subtitle" id="submissionSubtitle"></div>
+            </div>
+            <button class="btn btn--ghost" id="btnCancelSubmission" type="button">Cancel</button>
+          </div>
+          <div class="dialog__content">
+            <form class="submissionForm" id="submissionForm">
+              <div id="submissionFields"></div>
+              <div class="submissionForm__group">
+                <label class="submissionForm__label">Description</label>
+                <textarea
+                  class="submissionForm__textarea"
+                  id="submissionDescription"
+                  placeholder="Describe your sustainable action..."
+                  required
+                ></textarea>
+                <div class="submissionForm__hint">
+                  Provide details about your activity (minimum 20 characters)
+                </div>
+              </div>
+              <button class="btn" type="submit" id="submissionSubmitBtn">
+                Submit & Earn Points
+              </button>
+            </form>
+          </div>
+        </div>
       </dialog>
 
       <footer class="footer">
