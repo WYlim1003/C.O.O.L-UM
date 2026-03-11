@@ -303,7 +303,17 @@ body{
   text-align:left;
   vertical-align: top;
 }
-.table th{ color: var(--muted2); font-weight: 800; background: rgba(7,20,15,.20); position: sticky; top: 0; z-index: 2; }
+.table th { 
+  color: var(--muted2); 
+  font-weight: 800; 
+  /* Use a solid background color so scrolling text hides behind it */
+  background: var(--bg1); 
+  position: sticky; 
+  top: 0; 
+  z-index: 2; 
+  /* Optional: Adds a nice solid line below the sticky header */
+  box-shadow: 0 1px 0 var(--line);
+}
 .table tr:hover td{ background: rgba(0,59,112,.45); }
 .tag{
   display:inline-flex;
@@ -1169,14 +1179,114 @@ body{
   color: var(--muted2);
 }
 
-@media (max-width: 1080px){
-  .layout{ grid-template-columns: 1fr; }
-  .mapPane, .panel{ min-height: 520px; }
+/* =========================================
+   RESPONSIVENESS (Tablet & Mobile)
+   ========================================= */
+
+/* TABLET (up to 1080px) */
+@media (max-width: 1080px) {
+  .layout { 
+    grid-template-columns: 1fr; 
+    padding: 14px;
+  }
+  .mapPane, .panel { 
+    min-height: 500px; 
+  }
+  /* Switch from 3 columns to 2 columns on tablet */
+  .cards, .rewardCardsGrid { 
+    grid-template-columns: repeat(2, 1fr); 
+  }
+  .transportStats__grid { 
+    grid-template-columns: 1fr; 
+  }
 }
-@media (max-width: 720px){
-  .cards{ grid-template-columns: 1fr; }
-  .rewardGrid{ grid-template-columns: 1fr; }
-  .topbar{ position: static; }
-  .adminStats{ grid-template-columns: 1fr; }
-  .studentProfile__name{ max-width: 100px; }
+
+/* MOBILE (up to 768px) */
+@media (max-width: 768px) {
+  body, html {
+    overflow-x: hidden; /* Strictly prevent horizontal scrolling */
+  }
+  
+  /* Stack the topbar elements */
+  .topbar { 
+    position: static; 
+    flex-direction: column; 
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 12px;
+  }
+  .topbar__right { 
+    justify-content: space-between; 
+    width: 100%;
+  }
+  
+  .layout { 
+    padding: 10px; 
+    gap: 12px;
+  }
+  
+  /* Switch to single column */
+  .cards, .rewardCardsGrid, .rewardGrid, .adminStats { 
+    grid-template-columns: 1fr; 
+  }
+  
+  .mapPane { 
+    min-height: 400px; /* Shorter map on phones */
+  }
+  
+  /* Stack headers and action buttons */
+  .goalHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .goalHeader__right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  /* Allow filter dropdowns to take full width */
+  .filterBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterBar__group {
+    width: 100%;
+  }
+  
+  .studentProfile__name { 
+    max-width: 100px; 
+  }
+  
+  /* Force charts to stack vertically regardless of JS inline styles */
+  #chartGrid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .dialog__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* SMALL MOBILE (up to 480px) */
+@media (max-width: 480px) {
+  .brand__subtitle {
+    display: none; /* Hide the long subtitle on tiny screens to save vertical space */
+  }
+  .brand__logo {
+    height: 36px;
+  }
+  .card__value {
+    font-size: 18px; /* Slightly scale down large numbers */
+  }
+  .btn {
+    padding: 8px 12px;
+    font-size: 11px;
+    flex: 1;
+    text-align: center;
+  }
+  .goalHeader__right .btn {
+    width: 100%; /* Make export buttons full width on small phones */
+  }
 }
