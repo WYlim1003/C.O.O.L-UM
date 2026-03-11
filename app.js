@@ -12,6 +12,7 @@
     ts: (ms) => new Date(ms).toLocaleString(),
   };
 
+  // Storage keys
   const STORAGE_KEY = "um_demo_green_points_v1";
   const HISTORY_KEY = "um_demo_green_points_history_v1";
   const ADJUST_KEY = "um_demo_adjustments_v1";
@@ -22,8 +23,8 @@
     realtime: true,
     lastTickMs: Date.now(),
     tick: 0,
-    gp: loadGP(),
-    history: loadHistory(),
+    gp: 0,
+    history: [],
 
     sensors: {
       // populated at init
@@ -36,8 +37,8 @@
     recycling: { diversionPct: 0, contaminationPct: 0, binsFull: 0 },
     buses: new Map(), // line -> { activeBuses, headwayMin, ridershipNow, onTimePct }
     busHistory: new Map(), // line -> [{ ts, headwayMin, ridershipNow, onTimePct, activeBuses }]
-    adjustments: loadAdjustments(), // goalId -> [{ ts, description }]
-    goalHistory: loadGoalHistory(), // goalId -> [{ ts, ...metrics }]
+    adjustments: new Map(),
+    goalHistory: new Map(),
     selectedBusLine: "AB",
     biodiversity: new Map(), // zone -> { canopyPct, nativeSpeciesIndex, pollinatorScore }
     filters: {
@@ -46,16 +47,239 @@
     },
   };
 
+  // Load persisted data after state is initialized
+  state.gp = loadGP();
+  state.history = loadHistory();
+  state.adjustments = loadAdjustments();
+  state.goalHistory = loadGoalHistory();
+
   // ---------- Persistence ----------
   function loadGP() {
     const raw = localStorage.getItem(STORAGE_KEY);
-    const n = raw == null ? 0 : Number(raw);
-    return Number.isFinite(n) ? n : 0;
+    if (!raw) return 0;
+    try {
+      const num = JSON.parse(raw);
+      return Number.isFinite(num) ? num : 0;
+    } catch {
+      return 0;
+    }
   }
 
   function saveGP() {
-    localStorage.setItem(STORAGE_KEY, String(state.gp));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.gp));
   }
+
+  // Simple reward earn function
+  function earnReward(rewardId, description = "") {
+    const rewards = {
+      recycle: { title: "Recycle correctly", points: 10 },
+      transport: { title: "Green transport", points: 8 },
+      report: { title: "Report campus issue", points: 5 },
+      event: { title: "Sustainability program", points: 15 },
+    };
+
+    const reward = rewards[rewardId];
+    if (!reward) return;
+
+    const delta = reward.points;
+    state.gp += delta;
+    state.history.unshift({
+      ts: Date.now(),
+      delta,
+      title: reward.title,
+      description: description || reward.title,
+    });
+
+    // Limit history to 50 entries
+    if (state.history.length > 50) {
+      state.history = state.history.slice(0, 50);
+    }
+
+    saveGP();
+    saveHistory();
+    renderGP();
+    renderRecentActivity();
+
+    console.log(`Earned ${delta} GP for: ${reward.title}`);
+    return { success: true, points: delta };
+  }
+
+  // Open submission dialog for proof submission
+  function openSubmissionDialog(rewardId) {
+    const rewards = {
+      recycle: { 
+        title: "Recycle correctly", 
+        points: 10, 
+        verificationType: "photo",
+        subtitle: "Upload a photo of your recycling activity"
+      },
+      transport: { 
+        title: "Green transport", 
+        points: 8, 
+        verificationType: "qr",
+        subtitle: "Scan QR code at bus stop or bike station"
+      },
+      report: { 
+        title: "Report campus issue", 
+        points: 5, 
+        verificationType: "location",
+        subtitle: "Select location of environmental issue"
+      },
+      event: { 
+        title: "Sustainability program", 
+        points: 15, 
+        verificationType: "attendance",
+        subtitle: "Enter event code from organizer"
+      },
+    };
+
+    const reward = rewards[rewardId];
+    if (!reward) return;
+
+    state.currentSubmission = {
+      rewardId,
+      reward,
+      evidence: null,
+    };
+
+    $("#submissionTitle").textContent = reward.title;
+    $("#submissionSubtitle").textContent = reward.subtitle;
+    $("#submissionDescription").value = "";
+
+    // Build appropriate form fields based on verification type
+    const fieldsContainer = $("#submissionFields");
+    fieldsContainer.innerHTML = "";
+
+    if (reward.verificationType === "photo") {
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Upload Photo</label>
+          <input type="file" accept="image/*" id="photoInput" class="submissionForm__input" required />
+          <div class="submissionForm__hint">Photo of your recycling activity (max 500KB)</div>
+        </div>
+      `;
+
+      $("#photoInput").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          try {
+            const dataUrl = await handlePhotoUpload(file);
+            state.currentSubmission.evidence = { type: "photo", data: dataUrl };
+          } catch (err) {
+            alert(err.message);
+            e.target.value = "";
+          }
+        }
+      });
+    } else if (reward.verificationType === "qr") {
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">QR Code</label>
+          <button type="button" class="btn" id="btnMockQR">Simulate QR Scan</button>
+          <div class="submissionForm__hint" id="qrResult">Click to scan QR code</div>
+        </div>
+      `;
+
+      $("#btnMockQR").addEventListener("click", () => {
+        const qrData = generateMockQRScan();
+        state.currentSubmission.evidence = { type: "qr", ...qrData };
+        $("#qrResult").textContent = `✓ Scanned: ${qrData.placeName}`;
+        $("#qrResult").style.color = "#45ff9a";
+      });
+    } else if (reward.verificationType === "location") {
+      const locations = UM_DEMO?.campusPlaces || [];
+      const options = locations.map(p => 
+        `<option value="${p.id}">${p.name}</option>`
+      ).join("");
+
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Location</label>
+          <select id="locationSelect" class="submissionForm__input" required>
+            <option value="">Select location...</option>
+            ${options}
+          </select>
+          <div class="submissionForm__hint">Where did you notice the issue?</div>
+        </div>
+      `;
+
+      $("#locationSelect").addEventListener("change", (e) => {
+        const placeId = e.target.value;
+        const place = locations.find(p => p.id === placeId);
+        if (place) {
+          state.currentSubmission.evidence = { 
+            type: "location", 
+            placeId: place.id,
+            placeName: place.name
+          };
+        }
+      });
+    } else if (reward.verificationType === "attendance") {
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Event Code</label>
+          <input type="text" id="eventCodeInput" class="submissionForm__input" 
+                 placeholder="e.g., TREE2026" required />
+          <div class="submissionForm__hint">Enter the event code provided by organizer</div>
+        </div>
+      `;
+
+      $("#eventCodeInput").addEventListener("input", (e) => {
+        const code = e.target.value.trim().toUpperCase();
+        if (code) {
+          state.currentSubmission.evidence = { 
+            type: "attendance", 
+            eventCode: code
+          };
+        }
+      });
+    }
+
+    $("#submissionDialog").showModal();
+  }
+
+  // Handle photo upload
+  function handlePhotoUpload(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error("No file selected"));
+        return;
+      }
+
+      if (file.size > 500000) {
+        reject(new Error("File too large (max 500KB)"));
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        reject(new Error("File must be an image"));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Generate mock QR scan data
+  function generateMockQRScan() {
+    const qrLocations = [
+      { code: "QR_UMCENTRAL_BUS", placeId: "um-central", name: "UM Central Bus Stop" },
+      { code: "QR_SPORT_BIKE", placeId: "sport-centre", name: "Sports Centre Bike Station" },
+      { code: "QR_FSKTM_BUS", placeId: "fsktm", name: "FSKTM Bus Stop" },
+      { code: "QR_KK7_BIKE", placeId: "kk7", name: "KK7 Bike Station" },
+    ];
+    const randomQR = qrLocations[Math.floor(Math.random() * qrLocations.length)];
+    return {
+      code: randomQR.code,
+      placeId: randomQR.placeId,
+      placeName: randomQR.name,
+      scannedAt: Date.now()
+    };
+  }
+
 
   function loadHistory() {
     const raw = localStorage.getItem(HISTORY_KEY);
@@ -150,6 +374,231 @@
     state.history = state.history.slice(0, 60);
     saveHistory();
     renderGP();
+  }
+
+  // ---------- Authentication ----------
+  function login(matricNumber, password) {
+    const student = UM_DEMO.DEMO_STUDENTS.find(
+      s => s.matricNumber === matricNumber && s.password === password
+    );
+    
+    if (!student) {
+      return { success: false, message: "Invalid matric number or password" };
+    }
+
+    const { password: _, ...studentData } = student;
+    state.currentStudent = studentData;
+    saveCurrentStudent(studentData);
+    
+    const students = loadAllStudentsData();
+    if (!students[matricNumber]) {
+      students[matricNumber] = { ...studentData, gp: 0 };
+      localStorage.setItem(STUDENTS_DATA_KEY, JSON.stringify(students));
+    }
+    
+    state.gp = loadGP();
+    state.history = loadHistory();
+    
+    return { success: true };
+  }
+
+  function logout() {
+    state.currentStudent = null;
+    saveCurrentStudent(null);
+    state.gp = 0;
+    state.history = [];
+    hideStudentUI();
+  }
+
+  function showLoginScreen(onSuccess) {
+    $("#loginScreen").classList.remove("hidden");
+    state._loginCallback = onSuccess;
+  }
+
+  function hideLoginScreen() {
+    $("#loginScreen").classList.add("hidden");
+  }
+
+  function showStudentUI() {
+    $("#studentProfile").style.display = "flex";
+    $("#gpKpi").style.display = "flex";
+    // Admin panel hidden for demo
+    // const adminBtn = $("#btnOpenAdmin");
+    // if (adminBtn) adminBtn.style.display = "inline-flex";
+    $("#btnLogout").style.display = "inline-flex";
+  }
+
+  function hideStudentUI() {
+    $("#studentProfile").style.display = "none";
+    $("#gpKpi").style.display = "none";
+    const adminBtn = $("#btnOpenAdmin");
+    if (adminBtn) adminBtn.style.display = "none";
+    $("#btnLogout").style.display = "none";
+  }
+
+  // ---------- Claim Submission & Management ----------
+  function generateClaimId() {
+    return `claim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  function getClaimsForStudent(matricNumber) {
+    return state.claims.filter(c => c.studentMatric === matricNumber);
+  }
+
+  function getClaimsByStatus(status) {
+    if (!state.currentStudent) return [];
+    return getClaimsForStudent(state.currentStudent.matricNumber)
+      .filter(c => c.status === status)
+      .sort((a, b) => b.submittedAt - a.submittedAt);
+  }
+
+  function getTodayClaimsForReward(rewardId) {
+    if (!state.currentStudent) return [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return getClaimsForStudent(state.currentStudent.matricNumber).filter(c => 
+      c.rewardId === rewardId && 
+      c.submittedAt >= today.getTime() &&
+      c.status !== UM_DEMO.CLAIM_STATUS.REJECTED
+    );
+  }
+
+  function canSubmitClaim(rewardId) {
+    const reward = UM_DEMO.REWARD_TYPES.find(r => r.id === rewardId);
+    if (!reward) return { canSubmit: false, reason: "Invalid reward type" };
+    
+    if (reward.dailyLimit !== null) {
+      const todayClaims = getTodayClaimsForReward(rewardId);
+      if (todayClaims.length >= reward.dailyLimit) {
+        return { 
+          canSubmit: false, 
+          reason: `Daily limit reached (${reward.dailyLimit} claims per day)` 
+        };
+      }
+    }
+    
+    return { canSubmit: true };
+  }
+
+  function submitClaim(rewardId, evidence, location, description) {
+    if (!state.currentStudent) return { success: false, message: "Not logged in" };
+    
+    const validation = canSubmitClaim(rewardId);
+    if (!validation.canSubmit) {
+      return { success: false, message: validation.reason };
+    }
+
+    const reward = UM_DEMO.REWARD_TYPES.find(r => r.id === rewardId);
+    if (!reward) return { success: false, message: "Invalid reward" };
+
+    if (!description || description.trim().length < 20) {
+      return { success: false, message: "Description must be at least 20 characters" };
+    }
+
+    const claim = {
+      claimId: generateClaimId(),
+      studentMatric: state.currentStudent.matricNumber,
+      studentName: state.currentStudent.name,
+      rewardId: reward.id,
+      rewardTitle: reward.title,
+      rewardPoints: reward.points,
+      status: reward.approvalFlow === "auto" ? UM_DEMO.CLAIM_STATUS.APPROVED : UM_DEMO.CLAIM_STATUS.PENDING,
+      submittedAt: Date.now(),
+      evidence: evidence,
+      location: location,
+      description: description.trim(),
+      reviewedBy: reward.approvalFlow === "auto" ? "System (Auto-approved)" : null,
+      reviewedAt: reward.approvalFlow === "auto" ? Date.now() : null,
+      reviewNotes: reward.approvalFlow === "auto" ? "Automatically approved based on verification" : ""
+    };
+
+    state.claims.push(claim);
+    saveClaims();
+
+    if (claim.status === UM_DEMO.CLAIM_STATUS.APPROVED) {
+      addGP(reward.points, reward.title);
+    }
+
+    return { success: true, claim, autoApproved: reward.approvalFlow === "auto" };
+  }
+
+  function approveClaim(claimId, notes = "") {
+    const claim = state.claims.find(c => c.claimId === claimId);
+    if (!claim) return { success: false, message: "Claim not found" };
+    if (claim.status !== UM_DEMO.CLAIM_STATUS.PENDING) {
+      return { success: false, message: "Claim already reviewed" };
+    }
+
+    claim.status = UM_DEMO.CLAIM_STATUS.APPROVED;
+    claim.reviewedBy = "Admin";
+    claim.reviewedAt = Date.now();
+    claim.reviewNotes = notes;
+    saveClaims();
+
+    const students = loadAllStudentsData();
+    if (students[claim.studentMatric]) {
+      students[claim.studentMatric].gp = (students[claim.studentMatric].gp || 0) + claim.rewardPoints;
+      localStorage.setItem(STUDENTS_DATA_KEY, JSON.stringify(students));
+    }
+
+    if (state.currentStudent && state.currentStudent.matricNumber === claim.studentMatric) {
+      state.gp = loadGP();
+      renderGP();
+    }
+
+    return { success: true };
+  }
+
+  function rejectClaim(claimId, notes = "") {
+    const claim = state.claims.find(c => c.claimId === claimId);
+    if (!claim) return { success: false, message: "Claim not found" };
+    if (claim.status !== UM_DEMO.CLAIM_STATUS.PENDING) {
+      return { success: false, message: "Claim already reviewed" };
+    }
+
+    claim.status = UM_DEMO.CLAIM_STATUS.REJECTED;
+    claim.reviewedBy = "Admin";
+    claim.reviewedAt = Date.now();
+    claim.reviewNotes = notes || "Does not meet criteria";
+    saveClaims();
+
+    return { success: true };
+  }
+
+  // ---------- Evidence & Verification ----------
+  function handlePhotoUpload(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error("No file selected"));
+        return;
+      }
+
+      if (file.size > 500000) {
+        reject(new Error("File too large (max 500KB)"));
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        reject(new Error("File must be an image"));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function generateMockQRScan() {
+    const qrLocations = UM_DEMO.QR_LOCATIONS;
+    const randomQR = qrLocations[Math.floor(Math.random() * qrLocations.length)];
+    return {
+      code: randomQR.code,
+      placeId: randomQR.placeId,
+      placeName: randomQR.name,
+      scannedAt: Date.now()
+    };
   }
 
   // ---------- Map ----------
@@ -657,24 +1106,219 @@
 
   function renderGP() {
     $("#gpTotal").textContent = String(state.gp);
-    const list = $("#gpHistory");
-    list.innerHTML = state.history.length
-      ? state.history
-          .slice(0, 18)
-          .map((h) => {
-            const sign = h.delta >= 0 ? "+" : "";
-            return `
-            <div class="historyItem">
-              <div class="historyItem__left">
-                <div class="historyItem__title">${escapeHtml(h.title)}</div>
-                <div class="historyItem__meta">${escapeHtml(new Date(h.ts).toLocaleString())}</div>
-              </div>
-              <div class="historyItem__delta">${sign}${h.delta} GP</div>
+  }
+
+  function renderRecentActivity() {
+    const list = $("#recentActivityList");
+    if (!list) return;
+
+    if (state.history.length === 0) {
+      list.innerHTML = '<div class="recentActivity__empty">No activity yet. Claim your first reward above!</div>';
+      return;
+    }
+
+    list.innerHTML = state.history.slice(0, 10).map(item => {
+      const date = new Date(item.ts);
+      const timeStr = date.toLocaleString('en-US', { 
+        month: 'numeric', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true 
+      });
+      
+      return `
+        <div class="activityItem">
+          <div class="activityItem__left">
+            <div class="activityItem__title">${item.title}</div>
+            <div class="activityItem__time">${timeStr}</div>
+          </div>
+          <div class="activityItem__points">+${item.delta} GP</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateStudentProfile() {
+    if (state.currentStudent) {
+      $("#studentName").textContent = state.currentStudent.name;
+      $("#studentMatric").textContent = state.currentStudent.matricNumber;
+      const initials = state.currentStudent.name.split(" ").map(n => n[0]).join("").substr(0, 2).toUpperCase();
+      $("#studentAvatar").textContent = initials;
+      showStudentUI();
+      renderGP();
+    } else {
+      hideStudentUI();
+    }
+  }
+
+  function renderRewardCards() {
+    const grid = $("#rewardGrid");
+    if (!grid) return;
+
+    grid.innerHTML = UM_DEMO.REWARD_TYPES.map(reward => {
+      const validation = canSubmitClaim(reward.id);
+      const todayCount = getTodayClaimsForReward(reward.id).length;
+      const limitText = reward.dailyLimit 
+        ? `${todayCount}/${reward.dailyLimit} today` 
+        : "No daily limit";
+      
+      const verificationIcon = {
+        photo: "📸 Photo",
+        qr: "📱 QR Code",
+        location: "📍 Location",
+        attendance: "✅ Event Code"
+      }[reward.verificationType] || "📋 Verification";
+
+      return `
+        <div class="rewardCard">
+          <div class="rewardCard__title">${escapeHtml(reward.title)}</div>
+          <div class="rewardCard__desc">${escapeHtml(reward.description)}</div>
+          <div class="verificationIcon" style="margin-top: 6px;">${verificationIcon}</div>
+          <div class="rewardCard__row">
+            <div>
+              <span class="pill">+${reward.points} GP</span>
+              <div style="font-size: 10px; color: var(--muted2); margin-top: 4px;">${limitText}</div>
             </div>
-          `;
-          })
-          .join("")
-      : `<div style="color: var(--muted2); font-size: 12px;">No activity yet. Claim a reward to start.</div>`;
+            <button 
+              class="btn" 
+              data-reward="${reward.id}" 
+              type="button"
+              ${!validation.canSubmit ? 'disabled' : ''}
+            >
+              ${!validation.canSubmit ? 'Limit Reached' : 'Submit Claim'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderClaimsHistory() {
+    const list = $("#claimsHistory");
+    if (!list) return;
+
+    const claims = getClaimsByStatus(state.currentClaimTab);
+    
+    if (claims.length === 0) {
+      list.innerHTML = `<div style="color: var(--muted2); font-size: 12px; text-align: center; padding: 20px;">
+        No ${state.currentClaimTab} claims yet.
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = claims.map(claim => {
+      const statusBadge = `
+        <span class="statusBadge statusBadge--${claim.status}">
+          <span class="statusBadge__dot"></span>
+          ${claim.status.charAt(0).toUpperCase() + claim.status.slice(1)}
+        </span>
+      `;
+
+      let evidenceHTML = "";
+      if (claim.evidence?.type === "photo" && claim.evidence?.data) {
+        evidenceHTML = `
+          <div class="claimCard__evidence">
+            <img src="${claim.evidence.data}" alt="Evidence photo" />
+          </div>
+        `;
+      } else if (claim.evidence?.type === "qr") {
+        evidenceHTML = `<div class="claimCard__location">📱 QR: ${escapeHtml(claim.evidence.placeName || "Scanned")}</div>`;
+      }
+
+      let notesHTML = "";
+      if (claim.reviewNotes && claim.status !== UM_DEMO.CLAIM_STATUS.PENDING) {
+        notesHTML = `
+          <div class="claimCard__notes">
+            <strong>Review notes:</strong> ${escapeHtml(claim.reviewNotes)}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="claimCard">
+          <div class="claimCard__header">
+            <div>
+              <div class="claimCard__title">${escapeHtml(claim.rewardTitle)}</div>
+              <div class="claimCard__meta">
+                ${new Date(claim.submittedAt).toLocaleString()} • ${claim.rewardPoints} GP
+              </div>
+            </div>
+            ${statusBadge}
+          </div>
+          <div class="claimCard__body">${escapeHtml(claim.description)}</div>
+          ${evidenceHTML}
+          ${claim.location?.name ? `<div class="claimCard__location">📍 ${escapeHtml(claim.location.name)}</div>` : ""}
+          ${notesHTML}
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderAdminPanel() {
+    const pendingClaims = state.claims.filter(c => c.status === UM_DEMO.CLAIM_STATUS.PENDING);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const approvedToday = state.claims.filter(c => 
+      c.status === UM_DEMO.CLAIM_STATUS.APPROVED && 
+      c.reviewedAt >= today.getTime()
+    ).length;
+    const rejectedToday = state.claims.filter(c => 
+      c.status === UM_DEMO.CLAIM_STATUS.REJECTED && 
+      c.reviewedAt >= today.getTime()
+    ).length;
+
+    $("#adminPendingCount").textContent = String(pendingClaims.length);
+    $("#adminApprovedCount").textContent = String(approvedToday);
+    $("#adminRejectedCount").textContent = String(rejectedToday);
+
+    const list = $("#adminClaimsList");
+    if (!list) return;
+
+    list.innerHTML = pendingClaims.map(claim => {
+      let evidenceHTML = "";
+      if (claim.evidence?.type === "photo" && claim.evidence?.data) {
+        evidenceHTML = `
+          <div class="claimCard__evidence">
+            <img src="${claim.evidence.data}" alt="Evidence photo" />
+          </div>
+        `;
+      } else if (claim.evidence?.type === "qr") {
+        evidenceHTML = `<div class="claimCard__location">📱 QR: ${escapeHtml(claim.evidence.placeName || "Scanned")}</div>`;
+      }
+
+      return `
+        <div class="claimCard">
+          <div class="claimCard__header">
+            <div>
+              <div class="claimCard__title">${escapeHtml(claim.rewardTitle)} • ${claim.rewardPoints} GP</div>
+              <div class="claimCard__meta">
+                ${escapeHtml(claim.studentName)} (${escapeHtml(claim.studentMatric)}) • ${new Date(claim.submittedAt).toLocaleString()}
+              </div>
+            </div>
+            <span class="statusBadge statusBadge--pending">
+              <span class="statusBadge__dot"></span>
+              Pending
+            </span>
+          </div>
+          <div class="claimCard__body">${escapeHtml(claim.description)}</div>
+          ${evidenceHTML}
+          ${claim.location?.name ? `<div class="claimCard__location">📍 ${escapeHtml(claim.location.name)}</div>` : ""}
+          <div class="claimCard__footer">
+            <div class="claimCard__actions">
+              <button class="claimCard__btn claimCard__btn--approve" data-claim-id="${claim.claimId}" data-action="approve">
+                Approve
+              </button>
+              <button class="claimCard__btn claimCard__btn--reject" data-claim-id="${claim.claimId}" data-action="reject">
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
   }
 
   function setGoalHeader(title, subtitle, tableTitle) {
@@ -1072,35 +1716,206 @@
     renderGoal();
   }
 
+  function openSubmissionDialog(rewardId) {
+    const reward = UM_DEMO.REWARD_TYPES.find(r => r.id === rewardId);
+    if (!reward) return;
+
+    state.currentSubmission = { rewardId, evidence: null, location: null };
+    
+    $("#submissionTitle").textContent = `Submit: ${reward.title}`;
+    $("#submissionSubtitle").textContent = reward.description;
+    $("#submissionDescription").value = "";
+
+    const fieldsContainer = $("#submissionFields");
+    fieldsContainer.innerHTML = "";
+
+    if (reward.verificationType === "photo") {
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Upload Photo Evidence</label>
+          <input type="file" id="photoInput" class="submissionForm__fileInput" accept="image/*" />
+          <label for="photoInput" class="submissionForm__fileBtn" id="photoBtn">
+            <div class="submissionForm__fileIcon">📸</div>
+            <div class="submissionForm__fileText">Click to upload photo (max 500KB)</div>
+          </label>
+          <div id="photoPreview" class="submissionForm__preview" style="display: none;"></div>
+          <div class="submissionForm__hint">Upload a clear photo showing your recycling activity</div>
+        </div>
+      `;
+
+      $("#photoInput").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+          const dataUrl = await handlePhotoUpload(file);
+          state.currentSubmission.evidence = { type: "photo", data: dataUrl };
+          $("#photoBtn").classList.add("submissionForm__fileBtn--hasFile");
+          $("#photoBtn").querySelector(".submissionForm__fileText").textContent = "Photo uploaded ✓";
+          const preview = $("#photoPreview");
+          preview.innerHTML = `<img src="${dataUrl}" alt="Preview" />`;
+          preview.style.display = "block";
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    } else if (reward.verificationType === "qr") {
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Scan QR Code</label>
+          <button type="button" class="submissionForm__qrBtn" id="qrScanBtn">
+            📱 Simulate QR Scan
+          </button>
+          <div id="qrResult" style="display: none;"></div>
+          <div class="submissionForm__hint">Scan QR code at bus stop, bike station, or designated location</div>
+        </div>
+      `;
+
+      $("#qrScanBtn").addEventListener("click", () => {
+        const qrData = generateMockQRScan();
+        state.currentSubmission.evidence = { type: "qr", ...qrData };
+        state.currentSubmission.location = { placeId: qrData.placeId, name: qrData.placeName };
+        $("#qrResult").innerHTML = `
+          <div class="submissionForm__qrSuccess">
+            ✓ Scanned: ${escapeHtml(qrData.placeName)}<br/>
+            <small>Code: ${escapeHtml(qrData.code)}</small>
+          </div>
+        `;
+        $("#qrResult").style.display = "block";
+        $("#qrScanBtn").disabled = true;
+        $("#qrScanBtn").textContent = "✓ QR Code Scanned";
+      });
+    } else if (reward.verificationType === "location") {
+      const locationOptions = UM_DEMO.campusPlaces.map(p => 
+        `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+      ).join("");
+
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Select Location</label>
+          <select class="submissionForm__select" id="locationSelect" required>
+            <option value="">Choose campus location...</option>
+            ${locationOptions}
+          </select>
+          <div class="submissionForm__hint">Select where you observed the issue</div>
+        </div>
+      `;
+
+      $("#locationSelect").addEventListener("change", (e) => {
+        const placeId = e.target.value;
+        const place = UM_DEMO.campusPlaces.find(p => p.id === placeId);
+        if (place) {
+          state.currentSubmission.location = { placeId: place.id, name: place.name };
+          state.currentSubmission.evidence = { type: "location", placeId: place.id };
+        }
+      });
+    } else if (reward.verificationType === "attendance") {
+      const eventOptions = UM_DEMO.SUSTAINABILITY_EVENTS.map(e => 
+        `<option value="${e.eventCode}">${escapeHtml(e.title)} (${escapeHtml(e.date)})</option>`
+      ).join("");
+
+      fieldsContainer.innerHTML = `
+        <div class="submissionForm__group">
+          <label class="submissionForm__label">Event Code</label>
+          <select class="submissionForm__select" id="eventSelect" required>
+            <option value="">Choose event...</option>
+            ${eventOptions}
+          </select>
+          <div class="submissionForm__hint">Enter the event code provided at the sustainability program</div>
+        </div>
+      `;
+
+      $("#eventSelect").addEventListener("change", (e) => {
+        const eventCode = e.target.value;
+        const event = UM_DEMO.SUSTAINABILITY_EVENTS.find(ev => ev.eventCode === eventCode);
+        if (event) {
+          state.currentSubmission.evidence = { type: "attendance", eventCode, eventTitle: event.title };
+          state.currentSubmission.location = { name: event.location };
+        }
+      });
+    }
+
+    $("#submissionDialog").showModal();
+  }
+
   function wireUI() {
+    // Goal navigation
     $$(".goalBtn").forEach((btn) => btn.addEventListener("click", () => setGoal(btn.dataset.goal)));
-    $("#btnCenterUM").addEventListener("click", () => map.setView(umCenter, 16, { animate: true }));
-    $("#btnPause").addEventListener("click", () => {
+    $("#btnCenterUM")?.addEventListener("click", () => map.setView(umCenter, 16, { animate: true }));
+    $("#btnPause")?.addEventListener("click", () => {
       state.realtime = !state.realtime;
       $("#btnPause").textContent = state.realtime ? "Pause realtime" : "Resume realtime";
       setUpdatedPill();
     });
 
+    // Rewards dialog
     const dlg = $("#rewardsDialog");
-    $("#btnOpenRewards").addEventListener("click", () => dlg.showModal());
-
-    // rewards claim buttons
-    $$("[data-reward]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const id = b.dataset.reward;
-        if (id === "recycle") addGP(10, "Recycling activity");
-        else if (id === "transport") addGP(8, "Green transport");
-        else if (id === "event") addGP(15, "Sustainability participation");
-        else if (id === "report") addGP(5, "Reported campus issue");
+    const rewardsBtn = $("#btnOpenRewards");
+    
+    if (rewardsBtn) {
+      rewardsBtn.addEventListener("click", () => {
+        renderRecentActivity();
+        dlg.showModal();
       });
+    }
+
+    // Reward buttons - open submission dialog
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-reward]");
+      if (btn) {
+        const rewardId = btn.dataset.reward;
+        openSubmissionDialog(rewardId);
+      }
     });
 
-    $("#btnResetGP").addEventListener("click", () => {
-      state.gp = 0;
-      state.history = [];
-      saveGP();
-      saveHistory();
-      renderGP();
+    // Reset points button
+    $("#btnResetPoints")?.addEventListener("click", () => {
+      if (confirm("Are you sure you want to reset your Green Points to 0? This cannot be undone.")) {
+        state.gp = 0;
+        state.history = [];
+        saveGP();
+        saveHistory();
+        renderGP();
+        renderRecentActivity();
+        alert("Green Points reset to 0.");
+      }
+    });
+
+    // Submission form handler
+    const submissionForm = $("#submissionForm");
+    if (submissionForm) {
+      submissionForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        if (!state.currentSubmission) return;
+
+        const description = $("#submissionDescription").value.trim();
+        
+        if (description.length < 20) {
+          alert("Please provide a description of at least 20 characters.");
+          return;
+        }
+
+        if (!state.currentSubmission.evidence) {
+          alert("Please provide proof (photo, QR scan, location, or event code).");
+          return;
+        }
+
+        // Award points immediately
+        const result = earnReward(state.currentSubmission.rewardId, description);
+        
+        if (result.success) {
+          $("#submissionDialog").close();
+          alert(`✓ Proof submitted! +${result.points} GP earned.`);
+          state.currentSubmission = null;
+        }
+      });
+    }
+
+    // Cancel submission button
+    $("#btnCancelSubmission")?.addEventListener("click", () => {
+      $("#submissionDialog").close();
+      state.currentSubmission = null;
     });
 
     // Area / building filters
@@ -1193,17 +2008,39 @@
   }
 
   // ---------- Boot ----------
-  ensureMarkers();
-  initSimState();
-  wireUI();
-  renderGP();
-  renderGoal();
-  setUpdatedPill();
+  function initApp() {
+    console.log("Initializing app...");
+    try {
+      // Initialize UI
+      wireUI();
+      console.log("UI wired successfully");
 
-  setInterval(() => {
-    tickSim();
-    setUpdatedPill();
-    renderGoal();
-  }, 1000);
+      // Initialize map and simulation
+      ensureMarkers();
+      initSimState();
+      renderGoal();
+      setUpdatedPill();
+      renderGP();
+
+      // Start simulation
+      if (!window._simInterval) {
+        window._simInterval = setInterval(() => {
+          tickSim();
+          setUpdatedPill();
+          renderGoal();
+        }, 1000);
+      }
+    } catch (err) {
+      console.error("Error initializing app:", err);
+      alert("Error loading application. Check console for details.");
+    }
+  }
+
+  // Wait for DOM to be fully loaded
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+  } else {
+    initApp();
+  }
 })();
 

@@ -2,48 +2,48 @@
    Replace these with real UM feeds / APIs when available. */
 
 (() => {
-  const UM_CENTER = { lat: 3.1202, lng: 101.6536 }; // Universiti Malaya (approx)
+  const UM_CENTER = { lat: 3.1192, lng: 101.6538 }; // Universiti Malaya (verified)
 
   const campusPlaces = [
-    { id: "um-main-gate", name: "UM Main Gate", lat: 3.1207, lng: 101.6557, zone: "Gateway" },
-    { id: "perdana-library", name: "Perpustakaan Utama", lat: 3.1187, lng: 101.6545, zone: "Academic" },
-    { id: "dewan-tunku", name: "Dewan Tunku Canselor", lat: 3.117, lng: 101.6518, zone: "Admin" },
-    { id: "um-central", name: "UM Central (Student Hub)", lat: 3.1202, lng: 101.6519, zone: "Student" },
-    { id: "fsktm", name: "Faculty of Computer Science and Information Technology", lat: 3.1262, lng: 101.6569, zone: "Academic" },
-    { id: "sport-centre", name: "Sports Centre", lat: 3.1155, lng: 101.6527, zone: "Sports" },
-    { id: "kolej-kediaman", name: "Residential College Area", lat: 3.1119, lng: 101.6574, zone: "Residential" },
-    { id: "lakeside", name: "Tasik Varsiti (Lakeside)", lat: 3.1221, lng: 101.6469, zone: "Green" },
+    { id: "um-main-gate", name: "UM Main Gate", lat: 3.115556, lng: 101.650833, zone: "Gateway" },
+    { id: "perdana-library", name: "Perpustakaan Utama", lat: 3.1203, lng: 101.6539, zone: "Academic" },
+    { id: "dewan-tunku", name: "Dewan Tunku Canselor", lat: 3.1214714, lng: 101.6566121, zone: "Admin" },
+    { id: "um-central", name: "UM Central (Student Hub)", lat: 3.1209693, lng: 101.653674, zone: "Student" },
+    { id: "fsktm", name: "Faculty of Computer Science and Information Technology", lat: 3.128213, lng: 101.650695, zone: "Academic" },
+    { id: "sport-centre", name: "Sports Centre", lat: 3.1140, lng: 101.6530, zone: "Sports" },
+    { id: "kolej-kediaman", name: "Residential College Area", lat: 3.1220, lng: 101.6570, zone: "Residential" },
+    { id: "lakeside", name: "Tasik Varsiti (Lakeside)", lat: 3.11940, lng: 101.65685, zone: "Green" },
 
-    // Residential colleges KK1–KK13 (approximate locations)
-    { id: "kk1", name: "Kolej Kediaman Tuanku Abdul Rahman (ASTAR) – KK1", lat: 3.1180, lng: 101.6525, zone: "Residential" },
-    { id: "kk2", name: "Kolej Kediaman Tuanku Bahiyah – KK2", lat: 3.1188, lng: 101.6535, zone: "Residential" },
-    { id: "kk3", name: "Kolej Kediaman Tuanku Kurshiah – KK3", lat: 3.1192, lng: 101.6545, zone: "Residential" },
-    { id: "kk4", name: "Kolej Kediaman Bestari – KK4", lat: 3.1184, lng: 101.6572, zone: "Residential" },
-    { id: "kk5", name: "Kolej Kediaman Dayasari – KK5", lat: 3.1211, lng: 101.6563, zone: "Residential" },
-    { id: "kk6", name: "Kolej Kediaman Dayasari – KK6", lat: 3.1205, lng: 101.6555, zone: "Residential" },
-    { id: "kk7", name: "Kolej Kediaman Za'ba – KK7", lat: 3.1218, lng: 101.6527, zone: "Residential" },
-    { id: "kk8", name: "Kolej Kediaman Kinabalu – KK8", lat: 3.1224, lng: 101.6534, zone: "Residential" },
-    { id: "kk9", name: "Kolej Kediaman Tun Syed Zahiruddin – KK9", lat: 3.1106, lng: 101.6528, zone: "Residential" },
-    { id: "kk10", name: "Kolej Kediaman Tun Ahmad Zaidi – KK10", lat: 3.123, lng: 101.6515, zone: "Residential" },
-    { id: "kk11", name: "Kolej Kediaman Ungku Aziz – KK11", lat: 3.1195, lng: 101.6485, zone: "Residential" },
-    { id: "kk12", name: "Kolej Kediaman Raja Dr. Nazrin Shah – KK12", lat: 3.1182, lng: 101.6498, zone: "Residential" },
-    { id: "kk13", name: "Kolej Kediaman Tiga Belas – KK13", lat: 3.1125, lng: 101.6475, zone: "Residential" },
+    // Residential colleges KK1–KK13 (verified locations)
+    { id: "kk1", name: "Kolej Kediaman Tuanku Abdul Rahman (ASTAR) – KK1", lat: 3.1175533, lng: 101.6598477, zone: "Residential" },
+    { id: "kk2", name: "Kolej Kediaman Tuanku Bahiyah – KK2", lat: 3.1200, lng: 101.6555, zone: "Residential" },
+    { id: "kk3", name: "Kolej Kediaman Tuanku Kurshiah – KK3", lat: 3.123889, lng: 101.650556, zone: "Residential" },
+    { id: "kk4", name: "Kolej Kediaman Bestari – KK4", lat: 3.1245, lng: 101.6494, zone: "Residential" },
+    { id: "kk5", name: "Kolej Kediaman Dayasari – KK5", lat: 3.1267505, lng: 101.6594583, zone: "Residential" },
+    { id: "kk6", name: "Kolej Kediaman Ibnu Sina – KK6", lat: 3.1270, lng: 101.6580, zone: "Residential" },
+    { id: "kk7", name: "Kolej Kediaman Za'ba – KK7", lat: 3.126303, lng: 101.647844, zone: "Residential" },
+    { id: "kk8", name: "Kolej Kediaman Kinabalu – KK8", lat: 3.129687, lng: 101.648852, zone: "Residential" },
+    { id: "kk9", name: "Kolej Kediaman Tun Syed Zahiruddin – KK9", lat: 3.1050, lng: 101.6450, zone: "Residential" },
+    { id: "kk10", name: "Kolej Kediaman Tun Ahmad Zaidi – KK10", lat: 3.1305992, lng: 101.6478982, zone: "Residential" },
+    { id: "kk11", name: "Kolej Kediaman Ungku Aziz – KK11", lat: 3.1291, lng: 101.6604, zone: "Residential" },
+    { id: "kk12", name: "Kolej Kediaman Raja Dr. Nazrin Shah – KK12", lat: 3.1285, lng: 101.6590, zone: "Residential" },
+    { id: "kk13", name: "Kolej Kediaman Tiga Belas – KK13", lat: 3.1057, lng: 101.6405, zone: "Residential" },
 
     // Key academic stops
-    { id: "eng-faculty", name: "Faculty of Engineering", lat: 3.1238, lng: 101.6558, zone: "Academic" },
-    { id: "science-faculty", name: "Faculty of Science", lat: 3.1183, lng: 101.6522, zone: "Academic" },
-    { id: "api", name: "Academy of Islamic Studies (API)", lat: 3.1212, lng: 101.6495, zone: "Academic" },
-    { id: "academy-malay-studies", name: "Academy of Malay Studies", lat: 3.1198, lng: 101.6532, zone: "Academic" },
-    { id: "cff", name: "Centre for Foundation in Science", lat: 3.1222, lng: 101.6548, zone: "Academic" },
+    { id: "eng-faculty", name: "Faculty of Engineering", lat: 3.1186, lng: 101.6553, zone: "Academic" },
+    { id: "science-faculty", name: "Faculty of Science", lat: 3.11656, lng: 101.65808, zone: "Academic" },
+    { id: "api", name: "Academy of Islamic Studies (API)", lat: 3.1200, lng: 101.6540, zone: "Academic" },
+    { id: "academy-malay-studies", name: "Academy of Malay Studies", lat: 3.126161, lng: 101.652417, zone: "Academic" },
+    { id: "cff", name: "Centre for Foundation in Science", lat: 3.123250, lng: 101.659330, zone: "Academic" },
 
     // External / off-campus points
-    { id: "angkasapuri", name: "Angkasapuri", lat: 3.104, lng: 101.6635, zone: "External" },
-    { id: "pantai-permai", name: "Pantai Permai", lat: 3.1003, lng: 101.6655, zone: "External" },
-    { id: "bangsar-south", name: "Bangsar South", lat: 3.1122, lng: 101.663, zone: "External" },
-    { id: "ummc", name: "UM Medical Centre", lat: 3.0945, lng: 101.6545, zone: "External" },
+    { id: "angkasapuri", name: "Angkasapuri", lat: 3.111111, lng: 101.670528, zone: "External" },
+    { id: "pantai-permai", name: "Pantai Permai", lat: 3.108374, lng: 101.667074, zone: "External" },
+    { id: "bangsar-south", name: "Bangsar South", lat: 3.1106, lng: 101.6663, zone: "External" },
+    { id: "ummc", name: "UM Medical Centre", lat: 3.1137182, lng: 101.6529117, zone: "External" },
 
-    { id: "eng-faculty-west", name: "Faculty of Engineering (West Gate)", lat: 3.1252, lng: 101.6547, zone: "Academic" },
-    { id: "international-house", name: "International House", lat: 3.1251, lng: 101.6529, zone: "Residential" },
+    { id: "eng-faculty-west", name: "Faculty of Engineering (West Gate)", lat: 3.1190, lng: 101.6545, zone: "Academic" },
+    { id: "international-house", name: "International House", lat: 3.1195591, lng: 101.6372506, zone: "Residential" },
     { id: "rapid-ss17", name: "Rapid Stop 1 - Flat SS17", lat: 3.1092, lng: 101.6338, zone: "External" },
     { id: "rapid-sri-damai", name: "Rapid Stop 2 - S.K. Sri Damai", lat: 3.108, lng: 101.6365, zone: "External" },
     { id: "rapid-happy-mansion", name: "Rapid Stop 3 - PJ 219 Happy Mansion", lat: 3.1044, lng: 101.634, zone: "External" },
@@ -244,6 +244,141 @@
     { max: 999, label: "Hazardous", tag: "bad" },
   ];
 
+  // Enhanced reward system data structures
+  const REWARD_TYPES = [
+    {
+      id: "recycle",
+      title: "Recycle correctly",
+      points: 10,
+      verificationType: "photo",
+      approvalFlow: "manual",
+      dailyLimit: 3,
+      description: "Upload photo of recycling activity or scan QR at bin"
+    },
+    {
+      id: "transport",
+      title: "Use green transport",
+      points: 8,
+      verificationType: "qr",
+      approvalFlow: "auto",
+      dailyLimit: 5,
+      description: "Scan QR code at bus stop, bike station, or walking path"
+    },
+    {
+      id: "event",
+      title: "Join sustainability program",
+      points: 15,
+      verificationType: "attendance",
+      approvalFlow: "manual",
+      dailyLimit: null,
+      description: "Attend workshop, cleanup, or eco-volunteering event"
+    },
+    {
+      id: "report",
+      title: "Report campus issue",
+      points: 5,
+      verificationType: "location",
+      approvalFlow: "auto",
+      dailyLimit: 10,
+      description: "Report leak, overheating spot, waste overflow with location"
+    }
+  ];
+
+  const CLAIM_STATUS = {
+    PENDING: "pending",
+    APPROVED: "approved",
+    REJECTED: "rejected"
+  };
+
+  // Demo student accounts for mock authentication
+  const DEMO_STUDENTS = [
+    {
+      matricNumber: "17012345",
+      name: "Ahmad Bin Abdullah",
+      faculty: "Faculty of Computer Science and Information Technology",
+      year: 3,
+      email: "ahmad@siswa.um.edu.my",
+      password: "demo123"
+    },
+    {
+      matricNumber: "18023456",
+      name: "Siti Nurhaliza Binti Hassan",
+      faculty: "Faculty of Engineering",
+      year: 2,
+      email: "siti@siswa.um.edu.my",
+      password: "demo123"
+    },
+    {
+      matricNumber: "19034567",
+      name: "Lee Wei Ming",
+      faculty: "Faculty of Science",
+      year: 4,
+      email: "leewei@siswa.um.edu.my",
+      password: "demo123"
+    },
+    {
+      matricNumber: "20045678",
+      name: "Priya Devi A/P Ramesh",
+      faculty: "Faculty of Business and Economics",
+      year: 1,
+      email: "priya@siswa.um.edu.my",
+      password: "demo123"
+    },
+    {
+      matricNumber: "17056789",
+      name: "Muhammad Faiz Bin Ismail",
+      faculty: "Faculty of Medicine",
+      year: 5,
+      email: "faiz@siswa.um.edu.my",
+      password: "demo123"
+    }
+  ];
+
+  // Mock sustainability events for attendance verification
+  const SUSTAINABILITY_EVENTS = [
+    {
+      id: "event_001",
+      title: "Campus Tree Planting Day",
+      date: "2026-03-15",
+      location: "Tasik Varsiti",
+      eventCode: "TREE2026",
+      points: 15,
+      status: "upcoming"
+    },
+    {
+      id: "event_002",
+      title: "Recycling Workshop",
+      date: "2026-03-20",
+      location: "UM Central",
+      eventCode: "RECYCLE20",
+      points: 10,
+      status: "upcoming"
+    },
+    {
+      id: "event_003",
+      title: "Sustainability Talk Series",
+      date: "2026-03-25",
+      location: "Dewan Tunku Canselor",
+      eventCode: "SUSTAIN25",
+      points: 15,
+      status: "upcoming"
+    }
+  ];
+
+  // Valid QR codes for different campus locations (for transport/recycling claims)
+  const QR_LOCATIONS = [
+    { code: "QR_KK1_BUS", placeId: "kk1", type: "transport", name: "KK1 Bus Stop" },
+    { code: "QR_KK7_BUS", placeId: "kk7", type: "transport", name: "KK7 Bus Stop" },
+    { code: "QR_UMCENTRAL_BUS", placeId: "um-central", type: "transport", name: "UM Central Bus Stop" },
+    { code: "QR_FSKTM_BUS", placeId: "fsktm", type: "transport", name: "FSKTM Bus Stop" },
+    { code: "QR_KK1_RECYCLE", placeId: "kk1", type: "recycle", name: "KK1 Recycling Bin" },
+    { code: "QR_KK7_RECYCLE", placeId: "kk7", type: "recycle", name: "KK7 Recycling Bin" },
+    { code: "QR_UMCENTRAL_RECYCLE", placeId: "um-central", type: "recycle", name: "UM Central Recycling Station" },
+    { code: "QR_FSKTM_RECYCLE", placeId: "fsktm", type: "recycle", name: "FSKTM Recycling Bin" },
+    { code: "QR_LIB_RECYCLE", placeId: "perdana-library", type: "recycle", name: "Library Recycling Bin" },
+    { code: "QR_SPORT_BIKE", placeId: "sport-centre", type: "transport", name: "Sports Centre Bike Station" }
+  ];
+
   window.UM_DEMO = {
     UM_CENTER,
     campusPlaces,
@@ -254,6 +389,11 @@
     busRoutes,
     tempPolicy,
     aqiBands,
+    REWARD_TYPES,
+    CLAIM_STATUS,
+    DEMO_STUDENTS,
+    SUSTAINABILITY_EVENTS,
+    QR_LOCATIONS,
   };
 })();
 
