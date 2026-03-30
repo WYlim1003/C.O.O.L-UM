@@ -78,6 +78,10 @@
 
             <div class="cards" id="statCards"></div>
 
+            <div id="chartGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 14px; margin-top: 14px; margin-bottom: 14px;">
+              <canvas id="statChart"></canvas>
+            </div>
+
             <div class="tableWrap">
               <div class="tableTitle" id="statTableTitle">Yearly Summary</div>
               <div class="tableScroll">
@@ -134,8 +138,8 @@
       </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="./data.js"></script>
     <script src="./stats.js"></script>
   </body>
 </html>
-

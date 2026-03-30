@@ -303,7 +303,17 @@ body{
   text-align:left;
   vertical-align: top;
 }
-.table th{ color: var(--muted2); font-weight: 800; background: rgba(7,20,15,.20); position: sticky; top: 0; z-index: 2; }
+.table th { 
+  color: var(--muted2); 
+  font-weight: 800; 
+  /* Use a solid background color so scrolling text hides behind it */
+  background: var(--bg1); 
+  position: sticky; 
+  top: 0; 
+  z-index: 2; 
+  /* Optional: Adds a nice solid line below the sticky header */
+  box-shadow: 0 1px 0 var(--line);
+}
 .table tr:hover td{ background: rgba(0,59,112,.45); }
 .tag{
   display:inline-flex;

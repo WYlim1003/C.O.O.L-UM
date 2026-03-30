@@ -31,7 +31,7 @@
 
     // Key academic stops
     { id: "eng-faculty", name: "Faculty of Engineering", lat: 3.1186, lng: 101.6553, zone: "Academic" },
-    { id: "science-faculty", name: "Faculty of Science", lat: 3.11656, lng: 101.65808, zone: "Academic" },
+    { id: "science-faculty", name: "Faculty of Science", lat: 3.1192, lng: 101.6538, zone: "Academic" },
     { id: "api", name: "Academy of Islamic Studies (API)", lat: 3.1200, lng: 101.6540, zone: "Academic" },
     { id: "academy-malay-studies", name: "Academy of Malay Studies", lat: 3.126161, lng: 101.652417, zone: "Academic" },
     { id: "cff", name: "Centre for Foundation in Science", lat: 3.123250, lng: 101.659330, zone: "Academic" },
