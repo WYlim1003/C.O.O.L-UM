@@ -38,6 +38,10 @@
         </div>
 
         <div class="topbar__right">
+          <button class="alertBadge" id="alertBadge" type="button" title="AI Alerts">
+            <span class="alertBadge__icon">🤖</span>
+            <span class="alertBadge__count" id="alertCount">0</span>
+          </button>
           <div class="kpi" id="gpKpi">
             <div class="kpi__label">Green Points</div>
             <div class="kpi__value" id="gpTotal">0</div>
@@ -158,6 +162,17 @@
           </div>
 
           <div class="dialog__content">
+            <div class="guardianInfo">
+              <div class="guardianInfo__icon">🤖</div>
+              <div class="guardianInfo__content">
+                <div class="guardianInfo__title">🏆 Campus Guardian Reward (20 GP)</div>
+                <div class="guardianInfo__text">
+                  Our AI system monitors campus sensors 24/7. When anomalies are detected (water leaks, AQI spikes, energy waste), you'll receive alerts. 
+                  Verify them through the AI Alert Center to earn Campus Guardian points!
+                </div>
+              </div>
+            </div>
+
             <div class="rewardCardsGrid">
               <div class="rewardCard">
                 <div class="rewardCard__header">
@@ -241,12 +256,51 @@
         </div>
       </dialog>
 
+      <dialog class="dialog alertCenterDialog" id="alertCenterDialog" aria-label="AI Alert Center">
+        <form method="dialog" class="dialog__inner">
+          <div class="dialog__header">
+            <div>
+              <div class="dialog__title">🤖 AI Alert Center</div>
+              <div class="dialog__subtitle">
+                Real-time anomaly detection monitoring campus sensors
+              </div>
+            </div>
+            <button class="btn btn--ghost" value="close" type="submit">Close</button>
+          </div>
+          <div class="dialog__content">
+            <div class="alertCenterTabs">
+              <button class="alertTab is-active" data-alert-tab="active" type="button">
+                Active <span class="alertTab__count" id="activeAlertCount">0</span>
+              </button>
+              <button class="alertTab" data-alert-tab="dismissed" type="button">
+                Dismissed
+              </button>
+              <button class="alertTab" data-alert-tab="history" type="button">
+                History
+              </button>
+            </div>
+
+            <div class="alertCenterActions">
+              <button class="btn btn--ghost btn--sm" id="btnClearAllAlerts" type="button">
+                Dismiss All Active
+              </button>
+            </div>
+
+            <div class="alertCenterList" id="alertCenterList">
+              <div class="alertCenter__empty">No active alerts. System is monitoring normally.</div>
+            </div>
+          </div>
+        </form>
+      </dialog>
+
       <footer class="footer">
         <div class="footer__note">
           Demo data only. Replace the simulated feeds with UM IoT / building management / transit APIs when available.
         </div>
       </footer>
     </div>
+
+    <div class="alertToastContainer" id="alertToastContainer"></div>
 
     <script
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

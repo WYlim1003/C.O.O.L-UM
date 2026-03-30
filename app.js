@@ -17,6 +17,8 @@
   const HISTORY_KEY = "um_demo_green_points_history_v1";
   const ADJUST_KEY = "um_demo_adjustments_v1";
   const GOAL_HISTORY_KEY = "um_demo_goal_history_v1";
+  const ALERTS_KEY = "um_demo_alerts_v1";
+  const ALERTS_DISMISSED_KEY = "um_demo_alerts_dismissed_v1";
 
   const state = {
     goal: "temp",
@@ -45,6 +47,21 @@
       category: "all",
       placeId: "all",
     },
+
+    // AI Anomaly Detection System
+    alerts: {
+      active: [],
+      dismissed: [],
+      history: [],
+      baseline: {
+        waterByBuilding: new Map(), // id -> [recent values for rolling average]
+        aqiByPlace: new Map(), // id -> [recent values]
+        energyByBuilding: new Map(), // id -> [recent values]
+        tempByPlace: new Map(), // id -> [recent values]
+      }
+    },
+    unreadAlertCount: 0,
+    lastAnomalyCheck: Date.now(),
   };
 
   // Load persisted data after state is initialized
@@ -52,6 +69,10 @@
   state.history = loadHistory();
   state.adjustments = loadAdjustments();
   state.goalHistory = loadGoalHistory();
+  state.alerts.active = loadActiveAlerts();
+  state.alerts.dismissed = loadDismissedAlerts();
+  state.alerts.history = loadAlertHistory();
+  updateUnreadAlertCount();
 
   // ---------- Persistence ----------
   function loadGP() {
@@ -76,6 +97,7 @@
       transport: { title: "Green transport", points: 8 },
       report: { title: "Report campus issue", points: 5 },
       event: { title: "Sustainability program", points: 15 },
+      guardian: { title: "Campus Guardian", points: 20 },
     };
 
     const reward = rewards[rewardId];
@@ -374,6 +396,151 @@
     state.history = state.history.slice(0, 60);
     saveHistory();
     renderGP();
+  }
+
+  // ---------- Alert Persistence ----------
+  function loadActiveAlerts() {
+    const raw = localStorage.getItem(ALERTS_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.slice(0, 100) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveActiveAlerts() {
+    localStorage.setItem(ALERTS_KEY, JSON.stringify(state.alerts.active.slice(0, 100)));
+  }
+
+  function loadDismissedAlerts() {
+    const raw = localStorage.getItem(ALERTS_DISMISSED_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.slice(0, 200) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveDismissedAlerts() {
+    localStorage.setItem(ALERTS_DISMISSED_KEY, JSON.stringify(state.alerts.dismissed.slice(0, 200)));
+  }
+
+  function loadAlertHistory() {
+    const active = loadActiveAlerts();
+    const dismissed = loadDismissedAlerts();
+    return [...active, ...dismissed].sort((a, b) => b.detectedAt - a.detectedAt);
+  }
+
+  // ---------- Alert Management ----------
+  function generateAlertId() {
+    return `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  function addAlert(type, severity, title, message, location, value, metadata = {}) {
+    const alertId = generateAlertId();
+    const alert = {
+      id: alertId,
+      type,
+      severity,
+      title,
+      message,
+      location,
+      detectedAt: Date.now(),
+      value,
+      verified: false,
+      dismissedAt: null,
+      ...metadata
+    };
+
+    const existingSimilar = state.alerts.active.find(a => 
+      a.type === type && 
+      a.location.placeId === location.placeId &&
+      Date.now() - a.detectedAt < 300000
+    );
+
+    if (existingSimilar) {
+      return null;
+    }
+
+    state.alerts.active.unshift(alert);
+    state.alerts.active = state.alerts.active.slice(0, 100);
+    state.alerts.history.unshift(alert);
+    state.alerts.history = state.alerts.history.slice(0, 500);
+    
+    saveActiveAlerts();
+    updateUnreadAlertCount();
+    showAlertToast(alert);
+
+    console.log(`[AI Alert] ${severity.toUpperCase()}: ${title} - ${message}`);
+    return alert;
+  }
+
+  function dismissAlert(alertId) {
+    const idx = state.alerts.active.findIndex(a => a.id === alertId);
+    if (idx === -1) return false;
+
+    const alert = state.alerts.active[idx];
+    alert.dismissedAt = Date.now();
+    state.alerts.active.splice(idx, 1);
+    state.alerts.dismissed.unshift(alert);
+    state.alerts.dismissed = state.alerts.dismissed.slice(0, 200);
+
+    saveActiveAlerts();
+    saveDismissedAlerts();
+    updateUnreadAlertCount();
+    renderAlertCenter();
+    return true;
+  }
+
+  function verifyAlert(alertId, description) {
+    const alert = state.alerts.active.find(a => a.id === alertId);
+    if (!alert) return { success: false, message: "Alert not found" };
+
+    alert.verified = true;
+    dismissAlert(alertId);
+
+    const gpEarned = 20;
+    state.gp += gpEarned;
+    state.history.unshift({
+      ts: Date.now(),
+      delta: gpEarned,
+      title: "Campus Guardian",
+      description: `Verified: ${alert.title} - ${description || alert.message}`
+    });
+
+    if (state.history.length > 50) {
+      state.history = state.history.slice(0, 50);
+    }
+
+    saveGP();
+    saveHistory();
+    renderGP();
+    renderRecentActivity();
+
+    return { success: true, points: gpEarned };
+  }
+
+  function updateUnreadAlertCount() {
+    state.unreadAlertCount = state.alerts.active.length;
+    renderAlertBadge();
+  }
+
+  function clearAllAlerts() {
+    state.alerts.active.forEach(alert => {
+      alert.dismissedAt = Date.now();
+      state.alerts.dismissed.unshift(alert);
+    });
+    state.alerts.active = [];
+    state.alerts.dismissed = state.alerts.dismissed.slice(0, 200);
+    
+    saveActiveAlerts();
+    saveDismissedAlerts();
+    updateUnreadAlertCount();
+    renderAlertCenter();
   }
 
   // ---------- Authentication ----------
@@ -885,6 +1052,195 @@
     });
   }
 
+  // ---------- Anomaly Detection Engine ----------
+  function updateBaseline(map, key, value, maxSize = 30) {
+    const history = map.get(key) || [];
+    history.push(value);
+    if (history.length > maxSize) history.shift();
+    map.set(key, history);
+  }
+
+  function getBaseline(map, key) {
+    const history = map.get(key) || [];
+    if (history.length === 0) return null;
+    const sum = history.reduce((s, v) => s + v, 0);
+    return sum / history.length;
+  }
+
+  function getStdDev(map, key) {
+    const history = map.get(key) || [];
+    if (history.length < 3) return 0;
+    const avg = getBaseline(map, key);
+    const variance = history.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / history.length;
+    return Math.sqrt(variance);
+  }
+
+  function detectWaterLeaks() {
+    const alerts = [];
+    UM_DEMO.buildings.forEach(b => {
+      const w = state.waterByBuilding.get(b.id);
+      if (!w) return;
+
+      updateBaseline(state.alerts.baseline.waterByBuilding, b.id, w.lpmNow);
+      const baseline = getBaseline(state.alerts.baseline.waterByBuilding, b.id);
+      
+      if (baseline && w.lpmNow > baseline * 3) {
+        const place = UM_DEMO.campusPlaces.find(p => p.name.includes(b.name.split("(")[0].trim())) || 
+                      { id: b.id, name: b.name };
+        
+        const multiplier = (w.lpmNow / baseline).toFixed(1);
+        const severity = w.lpmNow > baseline * 4 ? "critical" : "warning";
+        
+        alerts.push({
+          type: "water",
+          severity,
+          title: "Possible water leak detected",
+          message: `${b.name} water usage ${multiplier}x normal`,
+          location: { placeId: place.id, placeName: b.name },
+          value: { 
+            current: Math.round(w.lpmNow), 
+            baseline: Math.round(baseline), 
+            delta: Math.round((w.lpmNow / baseline - 1) * 100) 
+          },
+          metric: "L/min"
+        });
+      }
+    });
+    return alerts;
+  }
+
+  function detectAQISpikes() {
+    const alerts = [];
+    UM_DEMO.campusPlaces.forEach(p => {
+      const a = state.sensors.airByPlace.get(p.id);
+      if (!a) return;
+
+      const history = state.alerts.baseline.aqiByPlace.get(p.id) || [];
+      if (history.length > 0) {
+        const recentAvg = history.slice(-6).reduce((s, v) => s + v, 0) / Math.min(6, history.length);
+        const spike = a.aqi - recentAvg;
+        
+        if (spike >= 40) {
+          const severity = spike >= 60 ? "critical" : "warning";
+          alerts.push({
+            type: "aqi",
+            severity,
+            title: "Air quality spike detected",
+            message: `${p.name} AQI jumped ${Math.round(spike)} points`,
+            location: { placeId: p.id, placeName: p.name },
+            value: { 
+              current: Math.round(a.aqi), 
+              baseline: Math.round(recentAvg), 
+              delta: Math.round(spike) 
+            },
+            metric: "AQI"
+          });
+        }
+      }
+
+      updateBaseline(state.alerts.baseline.aqiByPlace, p.id, a.aqi, 60);
+    });
+    return alerts;
+  }
+
+  function detectEnergyAnomalies() {
+    const alerts = [];
+    const now = new Date();
+    const hour = now.getHours();
+    const isNightTime = hour >= 0 && hour < 6;
+
+    if (!isNightTime) return alerts;
+
+    UM_DEMO.buildings.forEach(b => {
+      const e = state.energyByBuilding.get(b.id);
+      if (!e) return;
+
+      const expectedNightUsage = e.baselineKwhToday / 24 * 0.3;
+      
+      if (e.kwNow > expectedNightUsage * 2) {
+        const multiplier = (e.kwNow / expectedNightUsage).toFixed(1);
+        const severity = e.kwNow > expectedNightUsage * 3 ? "critical" : "warning";
+        
+        alerts.push({
+          type: "energy",
+          severity,
+          title: "Unusual energy consumption",
+          message: `${b.name} consuming ${multiplier}x expected at ${hour}:00`,
+          location: { placeId: b.id, placeName: b.name },
+          value: { 
+            current: Math.round(e.kwNow), 
+            baseline: Math.round(expectedNightUsage), 
+            delta: Math.round((e.kwNow / expectedNightUsage - 1) * 100) 
+          },
+          metric: "kW"
+        });
+      }
+    });
+    return alerts;
+  }
+
+  function detectTemperatureSpikes() {
+    const alerts = [];
+    UM_DEMO.campusPlaces.forEach(p => {
+      const t = state.sensors.tempByPlace.get(p.id);
+      if (!t) return;
+
+      const history = state.alerts.baseline.tempByPlace.get(p.id) || [];
+      if (history.length >= 5) {
+        const recentAvg = history.slice(-5).reduce((s, v) => s + v, 0) / 5;
+        const spike = t.tempC - recentAvg;
+        
+        if (spike >= 5) {
+          const severity = spike >= 7 ? "critical" : "warning";
+          alerts.push({
+            type: "temp",
+            severity,
+            title: "Unusual temperature spike",
+            message: `${p.name} temperature rose ${spike.toFixed(1)}°C rapidly`,
+            location: { placeId: p.id, placeName: p.name },
+            value: { 
+              current: Number(t.tempC.toFixed(1)), 
+              baseline: Number(recentAvg.toFixed(1)), 
+              delta: Number(spike.toFixed(1)) 
+            },
+            metric: "°C"
+          });
+        }
+      }
+
+      updateBaseline(state.alerts.baseline.tempByPlace, p.id, t.tempC, 60);
+    });
+    return alerts;
+  }
+
+  function detectAnomalies() {
+    if (!state.realtime) return;
+    
+    const now = Date.now();
+    if (now - state.lastAnomalyCheck < 10000) return;
+    
+    state.lastAnomalyCheck = now;
+
+    const allDetected = [
+      ...detectWaterLeaks(),
+      ...detectAQISpikes(),
+      ...detectEnergyAnomalies(),
+      ...detectTemperatureSpikes()
+    ];
+
+    allDetected.forEach(detected => {
+      addAlert(
+        detected.type,
+        detected.severity,
+        detected.title,
+        detected.message,
+        detected.location,
+        detected.value,
+        { metric: detected.metric }
+      );
+    });
+  }
+
   function tickSim() {
     if (!state.realtime) return;
     state.tick += 1;
@@ -902,7 +1258,11 @@
 
       // If cooling is on, target closer to comfort
       const coolingPull = t.iotCoolingOn ? -0.55 : 0;
-      const next = jitterToward(t.tempC, ambientTarget + coolingPull, 0.35);
+      let next = jitterToward(t.tempC, ambientTarget + coolingPull, 0.35);
+
+      if (state.tick % 450 === 0 && Math.random() < 0.08) {
+        next = next + rand(5.5, 7.2);
+      }
 
       // humidity jitter
       const hum = clamp(t.humidityPct + rand(-1.5, 1.5), 55, 88);
@@ -929,7 +1289,12 @@
       const traffic = p.zone === "Gateway" ? 12 : p.zone === "Green" ? -10 : 2;
       const wind = Math.sin((Date.now() / 60000) * 0.08) * 6;
       const drift = rand(-4, 5) + traffic + wind * 0.25;
-      const nextAqi = clamp(a.aqi + drift * 0.25, 18, 190);
+      let nextAqi = clamp(a.aqi + drift * 0.25, 18, 190);
+      
+      if (state.tick % 400 === 0 && Math.random() < 0.12) {
+        nextAqi = nextAqi + rand(45, 65);
+      }
+      
       const pm25 = clamp(jitterToward(a.pm25, 10 + nextAqi * 0.22, 2.2), 2, 160);
       const co2 = clamp(jitterToward(a.co2ppm, 420 + nextAqi * 3.1, 18), 380, 1800);
       state.sensors.airByPlace.set(p.id, { aqi: nextAqi, pm25, co2ppm: co2, lastSeenMs: Date.now() });
@@ -942,8 +1307,14 @@
       const peak = b.type === "Academic" ? 1.2 : b.type === "Residential" ? 1.05 : 1.1;
       const dayWave = 0.6 + (Math.sin((Date.now() / 60000) * 0.10) + 1) * 0.35;
       const targetKw = clamp((e.baselineKwhToday / 24) * peak * dayWave * rand(0.7, 1.15), 60, 980);
-      const kw = clamp(jitterToward(e.kwNow, targetKw, 18), 40, 1200);
-      const kwhToday = e.kwhToday + kw / 3600; // per-second tick approx
+      let kw = clamp(jitterToward(e.kwNow, targetKw, 18), 40, 1200);
+      
+      const hour = new Date().getHours();
+      if (hour >= 0 && hour < 6 && state.tick % 350 === 0 && Math.random() < 0.10) {
+        kw = kw * rand(2.1, 2.8);
+      }
+      
+      const kwhToday = e.kwhToday + kw / 3600;
       state.energyByBuilding.set(b.id, { ...e, kwNow: kw, kwhToday });
     });
 
@@ -953,7 +1324,12 @@
       if (!w) return;
       const dayWave = 0.55 + (Math.sin((Date.now() / 60000) * 0.09) + 1) * 0.38;
       const target = clamp(w.lpmNow * (0.85 + dayWave * 0.3) + rand(-10, 10), 10, 320);
-      const lpm = clamp(jitterToward(w.lpmNow, target, 10), 8, 420);
+      let lpm = clamp(jitterToward(w.lpmNow, target, 10), 8, 420);
+      
+      if (state.tick % 300 === 0 && Math.random() < 0.15) {
+        lpm = lpm * rand(3.2, 4.5);
+      }
+      
       const leakRisk = clamp(w.leakRisk + rand(-0.01, 0.015), 0.02, 0.65);
       const m3Today = w.m3Today + lpm / 60000;
       state.waterByBuilding.set(b.id, { lpmNow: lpm, leakRisk, m3Today });
@@ -995,6 +1371,10 @@
 
     if (state.tick % 600 === 0) {
       recordGoalSnapshot();
+    }
+
+    if (state.tick % 10 === 0) {
+      detectAnomalies();
     }
   }
 
@@ -1140,6 +1520,246 @@
     }).join('');
   }
 
+  // ---------- Alert UI Rendering ----------
+  function getAlertIcon(type) {
+    const icons = {
+      water: "💧",
+      energy: "⚡",
+      aqi: "🌫️",
+      temp: "🌡️"
+    };
+    return icons[type] || "⚠️";
+  }
+
+  function renderAlertBadge() {
+    const badge = $("#alertBadge");
+    const count = $("#alertCount");
+    if (!badge || !count) return;
+
+    count.textContent = String(state.unreadAlertCount);
+    
+    if (state.unreadAlertCount > 0) {
+      badge.classList.add("alertBadge--active");
+      const hasCritical = state.alerts.active.some(a => a.severity === "critical");
+      if (hasCritical) {
+        badge.classList.add("alertBadge--critical");
+      } else {
+        badge.classList.remove("alertBadge--critical");
+      }
+    } else {
+      badge.classList.remove("alertBadge--active", "alertBadge--critical");
+    }
+  }
+
+  function showAlertToast(alert) {
+    const container = $("#alertToastContainer");
+    if (!container) return;
+
+    const toastId = `toast_${alert.id}`;
+    const icon = getAlertIcon(alert.type);
+    const severityClass = alert.severity === "critical" ? "alertToast--critical" : "alertToast--warning";
+
+    const toast = document.createElement("div");
+    toast.id = toastId;
+    toast.className = `alertToast ${severityClass}`;
+    toast.innerHTML = `
+      <div class="alertToast__icon">${icon}</div>
+      <div class="alertToast__content">
+        <div class="alertToast__title">${escapeHtml(alert.title)}</div>
+        <div class="alertToast__message">${escapeHtml(alert.message)}</div>
+      </div>
+      <button class="alertToast__close" data-toast-id="${toastId}" type="button">×</button>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => toast.classList.add("alertToast--show"), 50);
+
+    const autoDismissTime = alert.severity === "critical" ? 15000 : 10000;
+    const dismissTimer = setTimeout(() => {
+      dismissToast(toastId);
+    }, autoDismissTime);
+
+    toast.querySelector(".alertToast__close").addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearTimeout(dismissTimer);
+      dismissToast(toastId);
+    });
+
+    toast.addEventListener("click", () => {
+      clearTimeout(dismissTimer);
+      dismissToast(toastId);
+      openAlertCenter();
+    });
+  }
+
+  function dismissToast(toastId) {
+    const toast = document.getElementById(toastId);
+    if (!toast) return;
+    
+    toast.classList.remove("alertToast--show");
+    setTimeout(() => toast.remove(), 300);
+  }
+
+  function renderAlertCenter() {
+    const activeTab = state.alertTab || "active";
+    
+    let alertsToShow = [];
+    if (activeTab === "active") {
+      alertsToShow = state.alerts.active;
+    } else if (activeTab === "dismissed") {
+      alertsToShow = state.alerts.dismissed;
+    } else {
+      alertsToShow = state.alerts.history;
+    }
+
+    $$(".alertTab").forEach(tab => {
+      tab.classList.toggle("is-active", tab.dataset.alertTab === activeTab);
+    });
+
+    const activeCount = $("#activeAlertCount");
+    if (activeCount) {
+      activeCount.textContent = String(state.alerts.active.length);
+    }
+
+    const list = $("#alertCenterList");
+    if (!list) return;
+
+    if (alertsToShow.length === 0) {
+      const emptyMsg = activeTab === "active" 
+        ? "No active alerts. System is monitoring normally."
+        : activeTab === "dismissed"
+        ? "No dismissed alerts."
+        : "No alert history yet.";
+      list.innerHTML = `<div class="alertCenter__empty">${emptyMsg}</div>`;
+      return;
+    }
+
+    list.innerHTML = alertsToShow.slice(0, 50).map(alert => {
+      const icon = getAlertIcon(alert.type);
+      const severityClass = alert.severity === "critical" ? "alertCard--critical" : "alertCard--warning";
+      const timeStr = new Date(alert.detectedAt).toLocaleString();
+
+      const isDismissed = alert.dismissedAt !== null;
+      const actionButtons = !isDismissed ? `
+        <div class="alertCard__actions">
+          <button class="btn btn--sm" data-verify-alert="${alert.id}">Report as Verified (+20 GP)</button>
+          <button class="btn btn--ghost btn--sm" data-dismiss-alert="${alert.id}">Dismiss</button>
+        </div>
+      ` : "";
+
+      return `
+        <div class="alertCard ${severityClass}">
+          <div class="alertCard__header">
+            <div class="alertCard__icon">${icon}</div>
+            <div class="alertCard__content">
+              <div class="alertCard__title">${escapeHtml(alert.title)}</div>
+              <div class="alertCard__message">${escapeHtml(alert.message)}</div>
+              <div class="alertCard__location">📍 ${escapeHtml(alert.location.placeName)}</div>
+              <div class="alertCard__time">${timeStr}</div>
+            </div>
+          </div>
+          <div class="alertCard__metrics">
+            <div class="alertMetric">
+              <div class="alertMetric__label">Current</div>
+              <div class="alertMetric__value">${alert.value.current} ${alert.metric || ""}</div>
+            </div>
+            <div class="alertMetric">
+              <div class="alertMetric__label">Baseline</div>
+              <div class="alertMetric__value">${alert.value.baseline} ${alert.metric || ""}</div>
+            </div>
+            <div class="alertMetric">
+              <div class="alertMetric__label">Change</div>
+              <div class="alertMetric__value alertMetric__value--delta">+${alert.value.delta}%</div>
+            </div>
+          </div>
+          ${actionButtons}
+          ${alert.verified ? '<div class="alertCard__verified">✓ Verified and reported</div>' : ""}
+        </div>
+      `;
+    }).join("");
+  }
+
+  function openAlertCenter() {
+    state.alertTab = state.alertTab || "active";
+    renderAlertCenter();
+    const activeCount = $("#activeAlertCount");
+    if (activeCount) {
+      activeCount.textContent = String(state.alerts.active.length);
+    }
+    $("#alertCenterDialog")?.showModal();
+  }
+
+  function openGuardianSubmission(alertId) {
+    const alert = state.alerts.active.find(a => a.id === alertId);
+    if (!alert) {
+      alert("Alert not found or already dismissed.");
+      return;
+    }
+
+    $("#alertCenterDialog")?.close();
+
+    state.currentSubmission = {
+      rewardId: "guardian",
+      evidence: { type: "anomaly", alertId: alert.id },
+      location: alert.location,
+      alert: alert
+    };
+
+    $("#submissionTitle").textContent = "Campus Guardian Report";
+    $("#submissionSubtitle").textContent = `Verify AI-detected anomaly: ${alert.title}`;
+    $("#submissionDescription").value = `Alert: ${alert.message}\nLocation: ${alert.location.placeName}\nDetected: ${new Date(alert.detectedAt).toLocaleString()}\n\n`;
+
+    const fieldsContainer = $("#submissionFields");
+    fieldsContainer.innerHTML = `
+      <div class="submissionForm__group">
+        <div class="alertSummaryBox">
+          <div class="alertSummaryBox__icon">${getAlertIcon(alert.type)}</div>
+          <div class="alertSummaryBox__content">
+            <div class="alertSummaryBox__title">${escapeHtml(alert.title)}</div>
+            <div class="alertSummaryBox__message">${escapeHtml(alert.message)}</div>
+            <div class="alertSummaryBox__metrics">
+              <span>Current: <strong>${alert.value.current} ${alert.metric || ""}</strong></span>
+              <span>Baseline: <strong>${alert.value.baseline} ${alert.metric || ""}</strong></span>
+              <span>Change: <strong class="alertSummaryBox__delta">+${alert.value.delta}%</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="submissionForm__group">
+        <label class="submissionForm__label">Optional: Upload Evidence Photo</label>
+        <input type="file" id="guardianPhotoInput" class="submissionForm__fileInput" accept="image/*" />
+        <label for="guardianPhotoInput" class="submissionForm__fileBtn" id="guardianPhotoBtn">
+          <div class="submissionForm__fileIcon">📸</div>
+          <div class="submissionForm__fileText">Click to upload supporting photo (optional)</div>
+        </label>
+        <div id="guardianPhotoPreview" class="submissionForm__preview" style="display: none;"></div>
+      </div>
+    `;
+
+    const photoInput = $("#guardianPhotoInput");
+    if (photoInput) {
+      photoInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+          const dataUrl = await handlePhotoUpload(file);
+          state.currentSubmission.photoEvidence = dataUrl;
+          $("#guardianPhotoBtn").classList.add("submissionForm__fileBtn--hasFile");
+          $("#guardianPhotoBtn").querySelector(".submissionForm__fileText").textContent = "Photo uploaded ✓";
+          const preview = $("#guardianPhotoPreview");
+          preview.innerHTML = `<img src="${dataUrl}" alt="Preview" />`;
+          preview.style.display = "block";
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    }
+
+    $("#submissionDialog").showModal();
+  }
+
   function updateStudentProfile() {
     if (state.currentStudent) {
       $("#studentName").textContent = state.currentStudent.name;
@@ -1157,7 +1777,7 @@
     const grid = $("#rewardGrid");
     if (!grid) return;
 
-    grid.innerHTML = UM_DEMO.REWARD_TYPES.map(reward => {
+    grid.innerHTML = UM_DEMO.REWARD_TYPES.filter(r => r.id !== "guardian").map(reward => {
       const validation = canSubmitClaim(reward.id);
       const todayCount = getTodayClaimsForReward(reward.id).length;
       const limitText = reward.dailyLimit 
@@ -1848,6 +2468,37 @@
       setUpdatedPill();
     });
 
+    // Alert System
+    $("#alertBadge")?.addEventListener("click", () => openAlertCenter());
+
+    document.addEventListener("click", (e) => {
+      const verifyBtn = e.target.closest("[data-verify-alert]");
+      if (verifyBtn) {
+        const alertId = verifyBtn.dataset.verifyAlert;
+        openGuardianSubmission(alertId);
+      }
+
+      const dismissBtn = e.target.closest("[data-dismiss-alert]");
+      if (dismissBtn) {
+        const alertId = dismissBtn.dataset.dismissAlert;
+        dismissAlert(alertId);
+      }
+
+      const tabBtn = e.target.closest("[data-alert-tab]");
+      if (tabBtn) {
+        const tab = tabBtn.dataset.alertTab;
+        state.alertTab = tab;
+        $$(".alertTab").forEach(t => t.classList.toggle("is-active", t.dataset.alertTab === tab));
+        renderAlertCenter();
+      }
+    });
+
+    $("#btnClearAllAlerts")?.addEventListener("click", () => {
+      if (confirm("Dismiss all active alerts?")) {
+        clearAllAlerts();
+      }
+    });
+
     // Rewards dialog
     const dlg = $("#rewardsDialog");
     const rewardsBtn = $("#btnOpenRewards");
@@ -1901,13 +2552,23 @@
           return;
         }
 
-        // Award points immediately
-        const result = earnReward(state.currentSubmission.rewardId, description);
-        
-        if (result.success) {
-          $("#submissionDialog").close();
-          alert(`✓ Proof submitted! +${result.points} GP earned.`);
-          state.currentSubmission = null;
+        if (state.currentSubmission.rewardId === "guardian") {
+          const alertId = state.currentSubmission.evidence.alertId;
+          const result = verifyAlert(alertId, description);
+          
+          if (result.success) {
+            $("#submissionDialog").close();
+            alert(`✓ Campus Guardian verified! +${result.points} GP earned.\n\nThank you for helping maintain campus sustainability!`);
+            state.currentSubmission = null;
+          }
+        } else {
+          const result = earnReward(state.currentSubmission.rewardId, description);
+          
+          if (result.success) {
+            $("#submissionDialog").close();
+            alert(`✓ Proof submitted! +${result.points} GP earned.`);
+            state.currentSubmission = null;
+          }
         }
       });
     }
@@ -2021,6 +2682,7 @@
       renderGoal();
       setUpdatedPill();
       renderGP();
+      renderAlertBadge();
 
       // Start simulation
       if (!window._simInterval) {
@@ -2030,6 +2692,8 @@
           renderGoal();
         }, 1000);
       }
+      
+      console.log("✓ AI Anomaly Detection System initialized");
     } catch (err) {
       console.error("Error initializing app:", err);
       alert("Error loading application. Check console for details.");

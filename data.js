@@ -281,6 +281,15 @@
       approvalFlow: "auto",
       dailyLimit: 10,
       description: "Report leak, overheating spot, waste overflow with location"
+    },
+    {
+      id: "guardian",
+      title: "Campus Guardian",
+      points: 20,
+      verificationType: "anomaly",
+      approvalFlow: "auto",
+      dailyLimit: 10,
+      description: "Report AI-detected anomaly with verification evidence"
     }
   ];
 
